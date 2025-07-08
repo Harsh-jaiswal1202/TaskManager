@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+.perspective-1000 {
+    perspective: 1000px;
+  }
+  .transform-style-preserve-3d {
+    transform-style: preserve-3d;
+  }
+  .backface-hidden {
+    backface-visibility: hidden;
+  }
+  .rotate-y-180 {
+    transform: rotateY(180deg);
+  }
+
+  @keyframes countup {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate-countup {
+    animation: countup 0.5s ease-out;
+  }
+
+  /* Animation keyframes */
+@keyframes pop-in {
+  0% {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  20%, 60% {
+    transform: translateX(-5px);
+  }
+  40%, 80% {
+    transform: translateX(5px);
+  }
+}
+
+/* Apply animations */
+.animate-pop-in {
+  animation: pop-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.animate-shake {
+  animation: shake 0.5s ease-in-out;
+}
+
+/* Confetti effect */
+.confetti {
+  background-image: 
+    radial-gradient(circle, #FFD700 1px, transparent 1px),
+    radial-gradient(circle, #FF69B4 1px, transparent 1px),
+    radial-gradient(circle, #87CEEB 1px, transparent 1px);
+  background-size: 15px 15px;
+  opacity: 0;
+  transition: opacity 0.5s;
+}
+
+/* Mobile-specific improvements */
+@media (max-width: 640px) {
+  /* Ensure modals don't overflow on small screens */
+  .emoji-picker-react {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  
+  /* Improve touch targets */
+  button {
+    min-height: 44px;
+  }
+  
+  /* Better spacing for mobile */
+  .space-y-4 > * + * {
+    margin-top: 1rem;
+  }
+  
+  /* Ensure text is readable on mobile */
+  input, textarea, select {
+    font-size: 16px !important; /* Prevents zoom on iOS */
+  }
+}
+
+/* Ensure emoji picker is responsive */
+.emoji-picker-react {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.emoji-picker-react .emoji-group {
+  padding: 0 !important;
+}
+
+.emoji-picker-react .emoji-group .emoji {
+  font-size: 1.5rem !important;
+}
+
+@media (max-width: 640px) {
+  .emoji-picker-react .emoji-group .emoji {
+    font-size: 1.25rem !important;
+  }
+}
