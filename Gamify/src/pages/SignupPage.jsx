@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 export default function SignupPage() {
-  const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '', designation: '', parentId: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '', designation: '' });
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
@@ -18,8 +18,8 @@ export default function SignupPage() {
       setError('Passwords do not match');
       return;
     }
-    if (!form.designation || (form.designation === 'user' && !form.parentId)) {
-      setError('Please select designation and enter Parent ID if required.');
+    if (!form.designation) {
+      setError('Please select designation.');
       return;
     }
     try {
@@ -29,9 +29,6 @@ export default function SignupPage() {
         password: form.password,
         designation: form.designation,
       };
-      if (form.designation === 'user') {
-        payload.parentId = form.parentId;
-      }
       await axios.post('http://localhost:3001/api/user/register', payload);
       navigate('/login');
     } catch (err) {
@@ -74,20 +71,10 @@ export default function SignupPage() {
             className="w-full px-4 py-3 rounded-lg border border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-700"
           >
             <option value="">-- Select Designation --</option>
-            <option value="admin/super admin">Admin/Super Admin</option>
+            <option value="admin">Admin</option>
+            <option value="superadmin">Super Admin</option>
             <option value="user">User</option>
           </select>
-          {form.designation === 'user' && (
-            <input
-              type="text"
-              name="parentId"
-              placeholder="Parent ID"
-              value={form.parentId}
-              onChange={handleChange}
-              required
-              className="w-full px-4 py-3 rounded-lg border border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-700"
-            />
-          )}
           <input
             type="password"
             name="password"
