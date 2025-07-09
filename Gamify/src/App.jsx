@@ -15,6 +15,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import ComingSoon from "./pages/ComingSoon";
 import NotFound from "./pages/NotFound";
 import SignupPage from "./pages/SignupPage";
+import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 
 function Root() {
   return (
@@ -40,6 +41,9 @@ function Root() {
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
               <Route path="/coming-soon" element={<ComingSoon />} />
               
+              {/* Super Admin Route */}
+              <Route path="/superadmin/dashboard" element={<SuperAdminDashboard />} />
+
               {/* Admin routes that should show Coming Soon */}
               <Route path="/admin" element={<NotFound />} />
               <Route path="/admin/*" element={<NotFound />} />

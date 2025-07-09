@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { FaSignOutAlt } from "react-icons/fa";
 import Cookies from "js-cookie";
-import { FaEdit, FaTrash, FaSave, FaTimes } from "react-icons/fa";
+import { FaEdit, FaTrash, FaSave, FaTimes, FaRegCopy } from "react-icons/fa";
 import { AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import EmojiPicker from "emoji-picker-react";
@@ -30,6 +30,15 @@ export default function Dashboard() {
     emoji: "",
     color: "",
   });
+  const parentId = Cookies.get("id");
+  const designation = Cookies.get("designation");
+  const isValidParentId = parentId && parentId.trim() && parentId !== "undefined" && parentId !== "null";
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(isValidParentId ? parentId : '');
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
+  };
 
   useEffect(() => {
     const id = Cookies.get("id");
@@ -249,7 +258,7 @@ export default function Dashboard() {
               </h1>
               <span className="text-lg sm:text-xl">🎯</span>
             </div>
-
+            
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3">
               <button
                 onClick={() => setShowAddModal(true)}
@@ -258,6 +267,25 @@ export default function Dashboard() {
                 <span>Add Category</span>
                 <span className="text-base sm:text-lg">📊</span>
               </button>
+
+              {/* Show parent id button only for admin, not super-admin */}
+              {designation === "admin" && (
+                <div className="relative">
+                  <button
+                    onClick={handleCopy}
+                    className="flex items-center gap-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 sm:px-4 py-2 rounded-full shadow-lg hover:scale-105 hover:shadow-xl transition-all text-sm sm:text-base"
+                    title="Copy Parent ID"
+                  >
+                    <span className="font-mono truncate max-w-[100px] sm:max-w-[180px]" title={isValidParentId ? parentId : 'Parent ID'}>
+                      {isValidParentId ? parentId : 'Parent ID'}
+                    </span>
+                    <FaRegCopy className="text-white text-base sm:text-lg" />
+                  </button>
+                  {copied && (
+                    <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded shadow animate-pulse z-10 whitespace-nowrap">Copied!</span>
+                  )}
+                </div>
+              )}
 
               <button
                 onClick={() => navigate("/coming-soon")}
@@ -401,7 +429,7 @@ export default function Dashboard() {
                   .getElementById(`card-${category._id}`)
                   ?.classList.add("animate-pulse");
                 setTimeout(() => {
-                  Cookies.get("id") === "admin"
+                  Cookies.get("designation") === "admin"
                     ? navigate(`/admin/task/${category._id}`)
                     : navigate(`/task/${category._id}`);
                 }, 300);

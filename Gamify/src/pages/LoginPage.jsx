@@ -27,8 +27,11 @@ export default function LoginPage() {
       });
       // Set the id cookie for authentication
       Cookies.set('id', response.data.userId, { expires: 7 });
+      Cookies.set('designation', form.designation, { expires: 7 });
       // On success, navigate based on designation
-      if (form.designation === 'admin' || form.designation === 'super-admin') {
+      if (form.designation === 'super-admin') {
+        navigate('/superadmin/dashboard');
+      } else if (form.designation === 'admin') {
         navigate('/admin/dashboard');
       } else {
         navigate('/dashboard');

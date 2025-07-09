@@ -9,7 +9,7 @@ const app = express();
 // Middleware
 app.use(cors({
   origin: [
-    "http://localhost:5175",
+    "http://localhost:3001",
     "http://localhost:5176",
     "http://127.0.0.1:5173",
     "http://192.168.1.100:5173",

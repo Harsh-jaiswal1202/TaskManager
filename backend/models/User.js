@@ -9,6 +9,7 @@ const userSchema = new mongoose.Schema({
   parentId: { type: String },
   avatar: String,
   points: { type: Number, default: 0 },
+  restricted: { type: Boolean, default: false },
   completedTasks: [
     {
       task: { type: mongoose.Schema.Types.ObjectId, ref: "Task" },
