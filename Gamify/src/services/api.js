@@ -48,4 +48,16 @@ export const taskAPI = {
   delete: (id) => api.delete(`/task/delete/${id}`)
 };
 
+// Restrict/Unrestrict Admin (Superadmin only)
+export const restrictAdmin = (id, token) =>
+  api.patch(`/user/restrict/${id}`, {}, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+
+// Restrict/Unrestrict User (Superadmin only)
+export const restrictUser = (id, token) =>
+  api.patch(`/user/restrict-user/${id}`, {}, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+
 export default api; 

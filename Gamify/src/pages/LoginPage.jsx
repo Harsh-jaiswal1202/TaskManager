@@ -27,7 +27,8 @@ export default function LoginPage() {
       });
       // Set the id cookie for authentication
       Cookies.set('id', response.data.userId, { expires: 7 });
-      Cookies.set('designation', form.designation, { expires: 7 });
+      Cookies.set('authToken', response.data.token, { expires: 7 });
+      Cookies.set('designation', response.data.designation, { expires: 7 });
       // On success, navigate based on designation
       if (form.designation === 'super-admin') {
         navigate('/superadmin/dashboard');

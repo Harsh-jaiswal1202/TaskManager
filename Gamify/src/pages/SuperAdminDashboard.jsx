@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { FaSignOutAlt } from "react-icons/fa";
 import Cookies from "js-cookie";
 import axios from "axios";
+import { restrictAdmin, restrictUser } from '../services/api';
 
 export default function SuperAdminDashboard() {
   const navigate = useNavigate();
@@ -37,13 +38,28 @@ export default function SuperAdminDashboard() {
 
   const handleToggleRestrict = async (adminId) => {
     setToggling((prev) => ({ ...prev, [adminId]: true }));
+    setError("");
     try {
-      await axios.patch(`http://localhost:3001/api/user/restrict/${adminId}`, {}, { withCredentials: true });
+      const token = Cookies.get('authToken');
+      await restrictAdmin(adminId, token);
       fetchUsers();
     } catch (err) {
       setError("Failed to update admin status.");
     }
     setToggling((prev) => ({ ...prev, [adminId]: false }));
+  };
+
+  const handleToggleUserRestrict = async (userId) => {
+    setToggling((prev) => ({ ...prev, [userId]: true }));
+    setError("");
+    try {
+      const token = Cookies.get('authToken');
+      await restrictUser(userId, token);
+      fetchUsers();
+    } catch (err) {
+      setError("Failed to update user status.");
+    }
+    setToggling((prev) => ({ ...prev, [userId]: false }));
   };
 
   return (
@@ -151,6 +167,17 @@ export default function SuperAdminDashboard() {
                         <div className="font-semibold text-pink-800">{user.username}</div>
                         <div className="text-sm text-gray-600">{user.email}</div>
                       </div>
+                      <button
+                        onClick={() => handleToggleUserRestrict(user._id)}
+                        disabled={toggling[user._id]}
+                        className={`px-4 py-2 rounded-full font-semibold shadow transition-all text-sm sm:text-base focus:outline-none ${user.restricted ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-green-500 hover:bg-green-600 text-white'} ${toggling[user._id] ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      >
+                        {toggling[user._id]
+                          ? 'Updating...'
+                          : user.restricted
+                          ? 'Unrestrict'
+                          : 'Restrict'}
+                      </button>
                     </div>
                   ))}
                 </div>
