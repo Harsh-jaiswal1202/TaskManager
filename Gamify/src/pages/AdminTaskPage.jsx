@@ -404,7 +404,7 @@ export default function TaskPage() {
           <div className="min-h-screen flex items-center justify-center p-6">
             {/* 🔙 Back Button (Top Left) */}
             <button
-              onClick={() => navigate("/dashboard")}
+              onClick={() => navigate("/admin/dashboard")}
               className="absolute top-6 left-6 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-full shadow-md font-medium flex items-center gap-2"
             >
               <span>←</span>
@@ -449,7 +449,7 @@ export default function TaskPage() {
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={() => navigate("/dashboard")}
+                onClick={() => navigate("/admin/dashboard")}
                 className={`${colorScheme.accent} text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2`}
               >
                 <span className="text-xl">←</span>
