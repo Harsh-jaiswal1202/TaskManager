@@ -16,6 +16,8 @@ import ComingSoon from "./pages/ComingSoon";
 import NotFound from "./pages/NotFound";
 import SignupPage from "./pages/SignupPage";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
+import MentorDashboard from "./pages/MentorDashboard";
+import FeedbackPage from "./pages/FeedbackPage";
 
 function Root() {
   return (
@@ -35,6 +37,9 @@ function Root() {
               <Route path="/responses" element={<ResponsesPage />} />
               <Route path="/my-progress" element={<MyProgressPage />} />
               <Route path="/task/create/:id" element={<CreateTaskPage />} />
+              <Route path="/feedback/:batchId" element={<FeedbackPage />} />
+              {/* Mentor Route */}
+              <Route path="/mentor/dashboard" element={<MentorDashboard />} />
 
               {/* Admin Routes */}
               <Route path="/admin/task/:id" element={<AdminTaskPage />} />

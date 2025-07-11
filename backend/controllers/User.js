@@ -67,9 +67,9 @@ const getAllUsers = async (req, res) => {
   console.log("getAllUsers");
   try {
     const admins = await User.find({ designation: 'admin' }, 'username email designation restricted');
-    console.log(admins);
+    const mentors = await User.find({ designation: 'mentor' }, 'username email designation restricted');
     const users = await User.find({ designation: 'user' }, 'username email designation restricted');
-    res.status(200).json({ admins, users });
+    res.status(200).json({ admins, mentors, users });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -114,6 +114,25 @@ const toggleUserRestriction = async (req, res) => {
   }
 };
 
+// Toggle restrict/unrestrict for a mentor (only by superadmin)
+const toggleMentorRestriction = async (req, res) => {
+  if (!req.user || req.user.designation !== 'super-admin') {
+    return res.status(403).json({ message: 'Only superadmin can perform this action' });
+  }
+  const { id } = req.params;
+  try {
+    const mentor = await User.findOne({ _id: id, designation: 'mentor' });
+    if (!mentor) {
+      return res.status(404).json({ message: 'Mentor not found' });
+    }
+    mentor.restricted = !mentor.restricted;
+    await mentor.save();
+    res.status(200).json({ message: `Mentor ${mentor.restricted ? 'restricted' : 'unrestricted'} successfully`, restricted: mentor.restricted });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
 // JWT auth middleware
 const authenticateJWT = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -130,4 +149,4 @@ const authenticateJWT = (req, res, next) => {
   });
 };
 
-export  { registerUser, loginUser, getAllUsers, toggleAdminRestriction, authenticateJWT, toggleUserRestriction };
+export  { registerUser, loginUser, getAllUsers, toggleAdminRestriction, authenticateJWT, toggleUserRestriction, toggleMentorRestriction };

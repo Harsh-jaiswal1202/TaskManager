@@ -3,22 +3,25 @@ import { useEffect, useState } from "react";
 import { FaSignOutAlt } from "react-icons/fa";
 import Cookies from "js-cookie";
 import axios from "axios";
-import { restrictAdmin, restrictUser } from '../services/api';
+import { restrictAdmin, restrictUser, restrictMentor } from '../services/api';
 
 export default function SuperAdminDashboard() {
   const navigate = useNavigate();
   const [admins, setAdmins] = useState([]);
+  const [mentors, setMentors] = useState([]);
   const [users, setUsers] = useState([]);
+  const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [toggling, setToggling] = useState({});
-  const [view, setView] = useState("admins"); // 'admins' or 'users'
+  const [view, setView] = useState("admins"); // 'admins', 'mentors', 'users', 'batches'
 
   useEffect(() => {
     const id = Cookies.get("id");
     const designation = Cookies.get("designation");
     if (id === "user" || designation !== "super-admin") navigate("/login");
     fetchUsers();
+    fetchBatches();
     // eslint-disable-next-line
   }, []);
 
@@ -28,12 +31,21 @@ export default function SuperAdminDashboard() {
     try {
       const res = await axios.get("http://localhost:3001/api/user/all", { withCredentials: true });
       setAdmins(res.data.admins);
+      setMentors(res.data.mentors || []);
       setUsers(res.data.users);
     } catch (err) {
-      console.log(err);
       setError("Failed to fetch users.");
     }
     setLoading(false);
+  };
+
+  const fetchBatches = async () => {
+    try {
+      const res = await axios.get("http://localhost:3001/api/batch/all", { withCredentials: true });
+      setBatches(res.data);
+    } catch (err) {
+      // Optionally handle error
+    }
   };
 
   const handleToggleRestrict = async (adminId) => {
@@ -47,6 +59,19 @@ export default function SuperAdminDashboard() {
       setError("Failed to update admin status.");
     }
     setToggling((prev) => ({ ...prev, [adminId]: false }));
+  };
+
+  const handleToggleMentorRestrict = async (mentorId) => {
+    setToggling((prev) => ({ ...prev, [mentorId]: true }));
+    setError("");
+    try {
+      const token = Cookies.get('authToken');
+      await restrictMentor(mentorId, token);
+      fetchUsers();
+    } catch (err) {
+      setError("Failed to update mentor status.");
+    }
+    setToggling((prev) => ({ ...prev, [mentorId]: false }));
   };
 
   const handleToggleUserRestrict = async (userId) => {
@@ -64,7 +89,7 @@ export default function SuperAdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 pt-2 p-2 sm:p-4 md:p-8">
-      {/* Animated Background Elements (copied from AdminDashboard) */}
+      {/* Animated Background Elements */}
       <div className="fixed top-0 left-0 w-full h-full overflow-hidden z-0">
         {[...Array(15)].map((_, i) => (
           <div
@@ -82,10 +107,9 @@ export default function SuperAdminDashboard() {
           />
         ))}
       </div>
-
       {/* Main Content */}
       <div className="relative z-10">
-        {/* Navbar (copied and adapted from AdminDashboard) */}
+        {/* Navbar */}
         <nav className="relative bg-white/90 backdrop-blur-md shadow-lg rounded-2xl p-2 sm:p-4 mb-4 sm:mb-8 md:mb-12 border-2 border-purple-100/50 mt-0">
           <div className="flex flex-col md:flex-row justify-between items-center gap-3 sm:gap-4">
             <div className="flex items-center gap-2 sm:gap-3">
@@ -102,10 +126,22 @@ export default function SuperAdminDashboard() {
                 Admins
               </button>
               <button
+                onClick={() => setView("mentors")}
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full shadow-lg transition-all text-sm sm:text-base font-semibold ${view === "mentors" ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white" : "bg-gray-200 text-purple-700 hover:bg-purple-100"}`}
+              >
+                Mentors
+              </button>
+              <button
                 onClick={() => setView("users")}
                 className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full shadow-lg transition-all text-sm sm:text-base font-semibold ${view === "users" ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white" : "bg-gray-200 text-purple-700 hover:bg-purple-100"}`}
               >
                 Users
+              </button>
+              <button
+                onClick={() => setView("batches")}
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full shadow-lg transition-all text-sm sm:text-base font-semibold ${view === "batches" ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white" : "bg-gray-200 text-purple-700 hover:bg-purple-100"}`}
+              >
+                Batches
               </button>
               {/* Absolute Sign Out Button */}
               <button
@@ -122,7 +158,6 @@ export default function SuperAdminDashboard() {
             </div>
           </div>
         </nav>
-
         {/* Error/Loading */}
         {error && <div className="text-red-500 text-center mb-4">{error}</div>}
         {loading ? (
@@ -156,6 +191,33 @@ export default function SuperAdminDashboard() {
                 </div>
               </div>
             )}
+            {view === "mentors" && (
+              <div>
+                <h2 className="text-xl font-bold mb-4 text-blue-700">Mentors</h2>
+                <div className="space-y-4">
+                  {mentors.length === 0 && <div className="text-gray-500">No mentors found.</div>}
+                  {mentors.map((mentor) => (
+                    <div key={mentor._id} className="flex items-center justify-between bg-gradient-to-r from-blue-100 to-purple-100 rounded-xl px-4 py-3 shadow border border-blue-200">
+                      <div>
+                        <div className="font-semibold text-blue-800">{mentor.username}</div>
+                        <div className="text-sm text-gray-600">{mentor.email}</div>
+                      </div>
+                      <button
+                        onClick={() => handleToggleMentorRestrict(mentor._id)}
+                        disabled={toggling[mentor._id]}
+                        className={`px-4 py-2 rounded-full font-semibold shadow transition-all text-sm sm:text-base focus:outline-none ${mentor.restricted ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-green-500 hover:bg-green-600 text-white'} ${toggling[mentor._id] ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      >
+                        {toggling[mentor._id]
+                          ? 'Updating...'
+                          : mentor.restricted
+                          ? 'Unrestrict'
+                          : 'Restrict'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {view === "users" && (
               <div>
                 <h2 className="text-xl font-bold mb-4 text-pink-700">Users</h2>
@@ -178,6 +240,22 @@ export default function SuperAdminDashboard() {
                           ? 'Unrestrict'
                           : 'Restrict'}
                       </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {view === "batches" && (
+              <div>
+                <h2 className="text-xl font-bold mb-4 text-purple-700">Batches</h2>
+                <div className="space-y-4">
+                  {batches.length === 0 && <div className="text-gray-500">No batches found.</div>}
+                  {batches.map((batch) => (
+                    <div key={batch._id} className="bg-gradient-to-r from-purple-100 to-blue-100 rounded-xl px-4 py-3 shadow border border-purple-200">
+                      <div className="font-semibold text-purple-800">{batch.name}</div>
+                      <div className="text-sm text-gray-600">Admin: {batch.admin?.username || 'N/A'}</div>
+                      <div className="text-sm text-blue-600">Mentor: {batch.mentor?.username || 'N/A'}</div>
+                      <div className="text-sm text-gray-700">Users: {batch.users?.map(u => u.username).join(', ') || 'None'}</div>
                     </div>
                   ))}
                 </div>

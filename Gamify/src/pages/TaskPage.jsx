@@ -47,7 +47,7 @@ const categoryColors = {
 };
 
 export default function TaskPage() {
-  const { id: categoryID } = useParams();
+  const { id: categoryID, batchId } = useParams();
   const navigate = useNavigate();
   const [category, setCategory] = useState();
   const [startedTasks, setStartedTasks] = useState({});
@@ -203,7 +203,13 @@ export default function TaskPage() {
 
       setCelebrate(true);
       setTimeout(() => setCelebrate(false), 2000);
-      setTimeout(() => navigate(`/survey/${categoryID}`), 800);
+      // If all tasks are completed, navigate to feedback page
+      const allCompleted = updated.length === category.tasks.length;
+      if (allCompleted && category.batchId) {
+        setTimeout(() => navigate(`/feedback/${category.batchId}`), 800);
+      } else {
+        setTimeout(() => navigate(`/survey/${categoryID}`), 800);
+      }
     } catch (error) {
       console.error("Error completing task:", error.message);
     }

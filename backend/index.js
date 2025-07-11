@@ -4,6 +4,8 @@ import connect from "./connection.js"; // Make sure you include `.js` extension
 import CategoryRoutes from "./routes/CategoryRoutes.js";
 import TaskRoutes from "./routes/TaskRoutes.js";
 import UserRoutes from "./routes/UserRoutes.js";
+import BatchRoutes from "./routes/BatchRoutes.js";
+import FeedbackRoutes from "./routes/FeedbackRoutes.js";
 const app = express();
 
 // Middleware
@@ -34,6 +36,8 @@ connect("mongodb://localhost:27017/Tasks")
 app.use("/api/categories", CategoryRoutes);
 app.use("/api/task", TaskRoutes);
 app.use("/api/user", UserRoutes);
+app.use("/api/batch", BatchRoutes);
+app.use("/api/feedback", FeedbackRoutes);
 // Optional test route
 app.get("/", (req, res) => {
   res.send("API is working!");

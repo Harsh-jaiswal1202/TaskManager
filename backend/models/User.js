@@ -5,7 +5,7 @@ const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  designation: { type: String, required: true },
+  designation: { type: String, required: true, enum: ['superadmin', 'admin', 'mentor', 'user'] }, // Added 'mentor' role
   parentId: { type: String },
   avatar: String,
   points: { type: Number, default: 0 },

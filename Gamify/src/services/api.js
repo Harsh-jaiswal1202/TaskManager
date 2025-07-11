@@ -60,4 +60,16 @@ export const restrictUser = (id, token) =>
     headers: { Authorization: `Bearer ${token}` }
   });
 
+// Restrict/Unrestrict Mentor (Superadmin only)
+export const restrictMentor = (id, token) =>
+  api.patch(`/user/restrict-mentor/${id}`, {}, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+
+// Delete Batch (Admin or Superadmin)
+export const deleteBatch = (id, token) =>
+  api.delete(`/batch/delete/${id}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+
 export default api; 
