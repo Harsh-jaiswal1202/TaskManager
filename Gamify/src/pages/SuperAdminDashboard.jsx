@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { FaSignOutAlt } from "react-icons/fa";
+import { FaSignOutAlt, FaEdit, FaTrash } from "react-icons/fa";
 import Cookies from "js-cookie";
 import axios from "axios";
 import { restrictAdmin, restrictUser, restrictMentor } from '../services/api';
@@ -15,6 +15,8 @@ export default function SuperAdminDashboard() {
   const [error, setError] = useState("");
   const [toggling, setToggling] = useState({});
   const [view, setView] = useState("admins"); // 'admins', 'mentors', 'users', 'batches'
+  const [editModal, setEditModal] = useState({ isOpen: false, batch: null, admin: '', mentor: '' });
+  const [deleteLoading, setDeleteLoading] = useState({});
 
   useEffect(() => {
     const id = Cookies.get("id");
@@ -88,6 +90,36 @@ export default function SuperAdminDashboard() {
       setError("Failed to update user status.");
     }
     setToggling((prev) => ({ ...prev, [userId]: false }));
+  };
+
+  const handleEditBatch = (batch) => {
+    setEditModal({ isOpen: true, batch, admin: batch.admin?._id || '', mentor: batch.mentor?._id || '' });
+  };
+
+  const handleEditModalSave = async () => {
+    if (!editModal.admin || !editModal.mentor) return;
+    try {
+      const token = Cookies.get('authToken');
+      await axios.patch(`http://localhost:3001/api/batch/edit/${editModal.batch._id}`, {
+        admin: editModal.admin,
+        mentor: editModal.mentor,
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      setEditModal({ isOpen: false, batch: null, admin: '', mentor: '' });
+      fetchBatches();
+    } catch (err) {
+      alert('Failed to update batch.');
+    }
+  };
+
+  const handleDeleteBatch = async (batchId) => {
+    setDeleteLoading((prev) => ({ ...prev, [batchId]: true }));
+    try {
+      await axios.delete(`http://localhost:3001/api/batch/delete/${batchId}`);
+      fetchBatches();
+    } catch (err) {
+      alert('Failed to delete batch.');
+    }
+    setDeleteLoading((prev) => ({ ...prev, [batchId]: false }));
   };
 
   return (
@@ -277,10 +309,73 @@ export default function SuperAdminDashboard() {
                             Users: {batch.users?.length || 0}
                           </p>
                         </div>
+                        <div className="flex gap-2 mt-4">
+                          <button
+                            className="flex items-center gap-1 px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600 text-xs font-semibold"
+                            onClick={() => handleEditBatch(batch)}
+                          >
+                            <FaEdit /> Edit
+                          </button>
+                          <button
+                            className="flex items-center gap-1 px-3 py-1 rounded bg-red-500 text-white hover:bg-red-600 text-xs font-semibold"
+                            onClick={() => handleDeleteBatch(batch._id)}
+                            disabled={deleteLoading[batch._id]}
+                          >
+                            <FaTrash /> {deleteLoading[batch._id] ? 'Deleting...' : 'Delete'}
+                          </button>
+                        </div>
                       </div>
                     ))
                   )}
                 </div>
+                {/* Edit Modal */}
+                {editModal.isOpen && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+                    <div className="bg-gradient-to-br from-white via-purple-50 to-purple-100 rounded-2xl p-8 shadow-2xl w-full max-w-md border-2 border-purple-200 animate-pop-in">
+                      <h2 className="text-2xl font-bold mb-6 text-center text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">Edit Batch</h2>
+                      <div className="mb-6">
+                        <label className="block mb-2 font-semibold text-purple-700">Admin</label>
+                        <select
+                          className="w-full border-2 border-purple-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-700 bg-white"
+                          value={editModal.admin}
+                          onChange={e => setEditModal(m => ({ ...m, admin: e.target.value }))}
+                        >
+                          <option value="">Select admin</option>
+                          {admins.map(a => (
+                            <option key={a._id} value={a._id}>{a.username} ({a.email})</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="mb-6">
+                        <label className="block mb-2 font-semibold text-purple-700">Mentor</label>
+                        <select
+                          className="w-full border-2 border-purple-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-700 bg-white"
+                          value={editModal.mentor}
+                          onChange={e => setEditModal(m => ({ ...m, mentor: e.target.value }))}
+                        >
+                          <option value="">Select mentor</option>
+                          {mentors.map(m => (
+                            <option key={m._id} value={m._id}>{m.username} ({m.email})</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex gap-3 justify-end mt-6">
+                        <button
+                          className="px-5 py-2 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold shadow"
+                          onClick={() => setEditModal({ isOpen: false, batch: null, admin: '', mentor: '' })}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          className="px-5 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold shadow hover:scale-105 transition-all"
+                          onClick={handleEditModalSave}
+                        >
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

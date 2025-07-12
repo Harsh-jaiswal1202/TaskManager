@@ -149,3 +149,36 @@ export const deleteBatch = async (req, res) => {
     res.status(500).json({ message: 'Failed to delete batch', error: error.message });
   }
 }; 
+
+// Edit batch (superadmin only)
+export const editBatch = async (req, res) => {
+  try {
+    // Only superadmin can edit batch
+    if (!req.user || req.user.designation !== 'superadmin') {
+      return res.status(403).json({ message: 'Only superadmin can edit batches' });
+    }
+    const { id } = req.params;
+    const { name, admin, mentor } = req.body;
+    const update = {};
+    if (name) update.name = name;
+    if (admin) {
+      const adminUser = await User.findById(admin);
+      if (!adminUser || (adminUser.designation !== 'admin' && adminUser.designation !== 'superadmin')) {
+        return res.status(400).json({ message: 'Assigned admin must have admin or superadmin designation' });
+      }
+      update.admin = admin;
+    }
+    if (mentor) {
+      const mentorUser = await User.findById(mentor);
+      if (!mentorUser || mentorUser.designation !== 'mentor') {
+        return res.status(400).json({ message: 'Assigned mentor must have mentor designation' });
+      }
+      update.mentor = mentor;
+    }
+    const batch = await Batch.findByIdAndUpdate(id, update, { new: true });
+    if (!batch) return res.status(404).json({ message: 'Batch not found' });
+    res.status(200).json(batch);
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to edit batch', error: error.message });
+  }
+}; 

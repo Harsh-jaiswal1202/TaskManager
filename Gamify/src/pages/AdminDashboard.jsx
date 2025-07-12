@@ -283,6 +283,29 @@ export default function Dashboard() {
   };
 
   const adminId = currentAdmin?.adminId || "N/A";
+  const [editBatchModal, setEditBatchModal] = useState({ isOpen: false, batch: null, name: '', mentor: '' });
+  const [editLoading, setEditLoading] = useState(false);
+
+  const handleEditBatch = (batch) => {
+    setEditBatchModal({ isOpen: true, batch, name: batch.name, mentor: batch.mentor?._id || '' });
+  };
+
+  const handleEditBatchSave = async () => {
+    if (!editBatchModal.name || !editBatchModal.mentor) return;
+    setEditLoading(true);
+    try {
+      const token = Cookies.get('authToken');
+      await axios.patch(`http://localhost:3001/api/batch/edit/${editBatchModal.batch._id}`, {
+        name: editBatchModal.name,
+        mentor: editBatchModal.mentor,
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      setEditBatchModal({ isOpen: false, batch: null, name: '', mentor: '' });
+      fetchBatches();
+    } catch (err) {
+      alert('Failed to update batch.');
+    }
+    setEditLoading(false);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 pt-2 p-2 sm:p-4 md:p-8">
@@ -723,13 +746,21 @@ export default function Dashboard() {
                         Users: {batch.users?.length || 0}
                       </p>
                     </div>
-                    <button
-                      onClick={() => handleDeleteBatch(batch._id)}
-                      disabled={toggling[batch._id]}
-                      className={`mt-3 sm:mt-4 w-full py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all hover:scale-105 ${toggling[batch._id] ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-500 hover:bg-red-600 text-white'}`}
-                    >
-                      {toggling[batch._id] ? 'Deleting...' : 'Delete Batch'}
-                    </button>
+                    <div className="flex gap-2 mt-4">
+                      <button
+                        className="flex items-center gap-1 px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600 text-xs font-semibold"
+                        onClick={() => handleEditBatch(batch)}
+                      >
+                        <FaEdit /> Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteBatch(batch._id)}
+                        disabled={toggling[batch._id]}
+                        className={`flex items-center gap-1 px-3 py-1 rounded bg-red-500 text-white hover:bg-red-600 text-xs font-semibold ${toggling[batch._id] ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
@@ -779,6 +810,52 @@ export default function Dashboard() {
                       className="flex-1 bg-white border-2 border-gray-200 text-gray-600 font-semibold px-4 sm:px-6 py-2 sm:py-3 rounded-xl hover:border-green-300 text-sm sm:text-base"
                     >
                       Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* Edit Batch Modal */}
+            {editBatchModal.isOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+                <div className="bg-gradient-to-br from-white via-green-50 to-green-100 rounded-2xl p-8 shadow-2xl w-full max-w-md border-2 border-green-200 animate-pop-in">
+                  <h2 className="text-2xl font-bold mb-6 text-center text-transparent bg-clip-text bg-gradient-to-r from-green-600 to-teal-600">Edit Batch</h2>
+                  <div className="mb-6">
+                    <label className="block mb-2 font-semibold text-green-700">Batch Name</label>
+                    <input
+                      className="w-full border-2 border-green-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-400 text-gray-700 bg-white"
+                      value={editBatchModal.name}
+                      onChange={e => setEditBatchModal(m => ({ ...m, name: e.target.value }))}
+                      placeholder="Batch Name"
+                    />
+                  </div>
+                  <div className="mb-6">
+                    <label className="block mb-2 font-semibold text-green-700">Mentor</label>
+                    <select
+                      className="w-full border-2 border-green-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-400 text-gray-700 bg-white"
+                      value={editBatchModal.mentor}
+                      onChange={e => setEditBatchModal(m => ({ ...m, mentor: e.target.value }))}
+                    >
+                      <option value="">Select mentor</option>
+                      {mentors.map(m => (
+                        <option key={m._id} value={m._id}>{m.username} ({m.email})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex gap-3 justify-end mt-6">
+                    <button
+                      className="px-5 py-2 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold shadow"
+                      onClick={() => setEditBatchModal({ isOpen: false, batch: null, name: '', mentor: '' })}
+                      disabled={editLoading}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="px-5 py-2 rounded-xl bg-gradient-to-r from-green-500 to-teal-500 text-white font-semibold shadow hover:scale-105 transition-all"
+                      onClick={handleEditBatchSave}
+                      disabled={editLoading}
+                    >
+                      {editLoading ? 'Saving...' : 'Save'}
                     </button>
                   </div>
                 </div>
