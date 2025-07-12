@@ -25,6 +25,8 @@ export default function Dashboard() {
   const userId = Cookies.get('id');
   const batchesBtnRef = useRef();
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
+  // Add a state to hold the admin info
+  const [adminInfo, setAdminInfo] = useState(null);
 
   useEffect(() => {
     if (showBatchDropdown && batchesBtnRef.current) {
@@ -78,6 +80,17 @@ export default function Dashboard() {
     // Fetch user batches
     fetchMyBatches();
     fetchAvailableBatches();
+    // Fetch user info to get parentId
+    axios.get(`http://localhost:3001/api/user/${userId}`)
+      .then(res => {
+        if (res.data && res.data.parentId) {
+          // Fetch admin info by parentId
+          axios.get(`http://localhost:3001/api/user/${res.data.parentId}`)
+            .then(adminRes => setAdminInfo(adminRes.data))
+            .catch(() => setAdminInfo(null));
+        }
+      })
+      .catch(() => setAdminInfo(null));
   }, []);
 
   const fetchMyBatches = () => {
@@ -245,6 +258,14 @@ export default function Dashboard() {
             </div>
           </div>
         </nav>
+
+        {/* User Info Card (show Admin ID) */}
+        {adminInfo && (
+          <div className="mb-6 max-w-xl mx-auto bg-white/80 rounded-xl shadow p-4 flex flex-col items-start">
+            <div className="text-sm text-gray-700 font-semibold mb-1">Admin ID:</div>
+            <div className="font-mono text-base text-purple-700 break-all">{adminInfo.adminId || adminInfo._id}</div>
+          </div>
+        )}
 
         {view === 'categories' && (
           <>

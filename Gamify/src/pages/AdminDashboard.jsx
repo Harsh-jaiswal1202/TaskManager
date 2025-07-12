@@ -45,7 +45,7 @@ export default function Dashboard() {
   const isValidParentId = parentId && parentId.trim() && parentId !== "undefined" && parentId !== "null";
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
-    navigator.clipboard.writeText(isValidParentId ? parentId : '');
+    navigator.clipboard.writeText(adminId);
     setCopied(true);
     setTimeout(() => setCopied(false), 1200);
   };
@@ -282,6 +282,8 @@ export default function Dashboard() {
     setBatchLoading(false);
   };
 
+  const adminId = currentAdmin?.adminId || "N/A";
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 pt-2 p-2 sm:p-4 md:p-8">
       {/* Animated Background Elements */}
@@ -339,10 +341,10 @@ export default function Dashboard() {
                   <button
                     onClick={handleCopy}
                     className="flex items-center gap-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 sm:px-4 py-2 rounded-full shadow-lg hover:scale-105 hover:shadow-xl transition-all text-sm sm:text-base"
-                    title="Copy Parent ID"
+                    title="Copy Admin ID"
                   >
-                    <span className="font-mono truncate max-w-[100px] sm:max-w-[180px]" title={isValidParentId ? parentId : 'Parent ID'}>
-                      {isValidParentId ? parentId : 'Parent ID'}
+                    <span className="font-mono truncate max-w-[100px] sm:max-w-[180px]" title={adminId}>
+                      {adminId}
                     </span>
                     <FaRegCopy className="text-white text-base sm:text-lg" />
                   </button>

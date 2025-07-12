@@ -4,7 +4,7 @@ import axios from 'axios';
 import Cookies from 'js-cookie';
 
 export default function LoginPage() {
-  const [form, setForm] = useState({ designation: '', email: '', password: '', parentId: '' });
+  const [form, setForm] = useState({ designation: '', email: '', password: '', adminId: '' });
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
@@ -15,7 +15,7 @@ export default function LoginPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.designation || !form.email || !form.password || (form.designation === 'user' && !form.parentId)) {
+    if (!form.designation || !form.email || !form.password || (form.designation === 'user' && !form.adminId)) {
       setError('Please fill in all required fields.');
       return;
     }
@@ -24,6 +24,7 @@ export default function LoginPage() {
         email: form.email,
         password: form.password,
         designation: form.designation,
+        ...(form.designation === 'user' && { adminId: form.adminId })
       });
       // Set the id cookie for authentication
       Cookies.set('id', response.data.userId, { expires: 7 });
@@ -87,9 +88,9 @@ export default function LoginPage() {
           {form.designation === 'user' && (
             <input
               type="text"
-              name="parentId"
-              placeholder="Parent ID"
-              value={form.parentId}
+              name="adminId"
+              placeholder="Admin ID"
+              value={form.adminId}
               onChange={handleChange}
               required
               className="w-full px-4 py-3 rounded-lg border border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-700"

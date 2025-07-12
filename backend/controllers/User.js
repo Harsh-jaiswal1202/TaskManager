@@ -23,11 +23,24 @@ const registerUser = async (req, res) => {
     if (designation === 'user') {
       userData.parentId = parentId;
     }
+    if (designation === 'admin') {
+      // Generate a unique short adminId like ADM123
+      let unique = false;
+      let adminId = '';
+      while (!unique) {
+        const randomNum = Math.floor(100 + Math.random() * 900); // 3-digit number
+        adminId = `ADM${randomNum}`;
+        const exists = await User.findOne({ adminId });
+        if (!exists) unique = true;
+      }
+      userData.adminId = adminId;
+    }
     const user = await User.create(userData);
 
     res.status(201).json({
       message: 'User registered successfully',
       userId: user._id,
+      adminId: user.adminId,
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -35,7 +48,7 @@ const registerUser = async (req, res) => {
 };
 
 const loginUser = async (req, res) => {
-  const { email, password, designation } = req.body;
+  const { email, password, designation, adminId } = req.body;
   try {
     const user = await User.findOne({ email });
     if (!user) {
@@ -47,6 +60,19 @@ const loginUser = async (req, res) => {
     }
     if (designation !== user.designation) {
       return res.status(400).json({ message: 'Invalid designation' });
+    }
+    // Additional check for user designation: validate adminId and parentId
+    if (designation === 'user') {
+      if (!adminId) {
+        return res.status(400).json({ message: 'Admin ID is required.' });
+      }
+      const admin = await User.findOne({ adminId, designation: 'admin' });
+      if (!admin) {
+        return res.status(400).json({ message: 'Invalid Admin ID.' });
+      }
+      if (user.parentId !== adminId) {
+        return res.status(400).json({ message: 'You are not assigned to this Admin ID.' });
+      }
     }
     // Generate JWT token
     const token = jwt.sign({ id: user._id, designation: user.designation }, config.jwtSecret, { expiresIn: '1d' });
@@ -67,7 +93,7 @@ const getAllUsers = async (req, res) => {
   console.log("getAllUsers");
   try {
     const superadmins = await User.find({ designation: 'superadmin' }, 'username email designation restricted');
-    const admins = await User.find({ designation: 'admin' }, 'username email designation restricted');
+    const admins = await User.find({ designation: 'admin' }, 'username email designation restricted adminId');
     const mentors = await User.find({ designation: 'mentor' }, 'username email designation restricted');
     const users = await User.find({ designation: 'user' }, 'username email designation restricted');
     res.status(200).json({ superadmins, admins, mentors, users });

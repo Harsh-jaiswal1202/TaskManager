@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 export default function SignupPage() {
-  const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '', designation: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '', designation: '', adminId: '' });
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
@@ -28,6 +28,7 @@ export default function SignupPage() {
         email: form.email,
         password: form.password,
         designation: form.designation,
+        ...(form.designation === 'user' && { parentId: form.adminId })
       };
       await axios.post('http://localhost:3001/api/user/register', payload);
       navigate('/login');
@@ -72,10 +73,21 @@ export default function SignupPage() {
           >
             <option value="">-- Select Designation --</option>
             <option value="admin">Admin</option>
-                            <option value="superadmin">Super Admin</option>
+            <option value="superadmin">Super Admin</option>
             <option value="mentor">Mentor</option>
             <option value="user">User</option>
           </select>
+          {form.designation === 'user' && (
+            <input
+              type="text"
+              name="adminId"
+              placeholder="Admin ID (provided by your admin)"
+              value={form.adminId}
+              onChange={handleChange}
+              required
+              className="w-full px-4 py-3 rounded-lg border border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-700"
+            />
+          )}
           <input
             type="password"
             name="password"

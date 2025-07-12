@@ -7,6 +7,7 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   designation: { type: String, required: true, enum: ['superadmin', 'admin', 'mentor', 'user'] }, // Added 'mentor' role
   parentId: { type: String },
+  adminId: { type: String, unique: true, sparse: true }, // Only for admins
   avatar: String,
   points: { type: Number, default: 0 },
   restricted: { type: Boolean, default: false },
