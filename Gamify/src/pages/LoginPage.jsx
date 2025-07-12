@@ -30,7 +30,7 @@ export default function LoginPage() {
       Cookies.set('authToken', response.data.token, { expires: 7 });
       Cookies.set('designation', response.data.designation, { expires: 7 });
       // On success, navigate based on designation
-      if (form.designation === 'super-admin') {
+      if (form.designation === 'superadmin') {
         navigate('/superadmin/dashboard');
       } else if (form.designation === 'admin') {
         navigate('/admin/dashboard');
@@ -62,7 +62,7 @@ export default function LoginPage() {
           >
             <option value="">-- Select Designation --</option>
             <option value="admin">Admin</option>
-            <option value="super-admin">Super Admin</option>
+                            <option value="superadmin">Super Admin</option>
             <option value="mentor">Mentor</option>
             <option value="user">User</option>
           </select>

@@ -72,7 +72,7 @@ export default function SignupPage() {
           >
             <option value="">-- Select Designation --</option>
             <option value="admin">Admin</option>
-            <option value="super-admin">Super Admin</option>
+                            <option value="superadmin">Super Admin</option>
             <option value="mentor">Mentor</option>
             <option value="user">User</option>
           </select>

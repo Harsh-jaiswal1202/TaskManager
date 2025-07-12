@@ -66,10 +66,11 @@ const loginUser = async (req, res) => {
 const getAllUsers = async (req, res) => {
   console.log("getAllUsers");
   try {
+    const superadmins = await User.find({ designation: 'superadmin' }, 'username email designation restricted');
     const admins = await User.find({ designation: 'admin' }, 'username email designation restricted');
     const mentors = await User.find({ designation: 'mentor' }, 'username email designation restricted');
     const users = await User.find({ designation: 'user' }, 'username email designation restricted');
-    res.status(200).json({ admins, mentors, users });
+    res.status(200).json({ superadmins, admins, mentors, users });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -78,7 +79,7 @@ const getAllUsers = async (req, res) => {
 // Toggle restrict/unrestrict for an admin
 const toggleAdminRestriction = async (req, res) => {
   // Only superadmin can restrict/unrestrict admins
-  if (!req.user || req.user.designation !== 'super-admin') {
+  if (!req.user || req.user.designation !== 'superadmin') {
     return res.status(403).json({ message: 'Only superadmin can perform this action' });
   }
   const { id } = req.params;
@@ -97,7 +98,7 @@ const toggleAdminRestriction = async (req, res) => {
 
 // Toggle restrict/unrestrict for a user (only by superadmin)
 const toggleUserRestriction = async (req, res) => {
-  if (!req.user || req.user.designation !== 'super-admin') {
+  if (!req.user || req.user.designation !== 'superadmin') {
     return res.status(403).json({ message: 'Only superadmin can perform this action' });
   }
   const { id } = req.params;
@@ -116,7 +117,7 @@ const toggleUserRestriction = async (req, res) => {
 
 // Toggle restrict/unrestrict for a mentor (only by superadmin)
 const toggleMentorRestriction = async (req, res) => {
-  if (!req.user || req.user.designation !== 'super-admin') {
+  if (!req.user || req.user.designation !== 'superadmin') {
     return res.status(403).json({ message: 'Only superadmin can perform this action' });
   }
   const { id } = req.params;
@@ -149,4 +150,18 @@ const authenticateJWT = (req, res, next) => {
   });
 };
 
-export  { registerUser, loginUser, getAllUsers, toggleAdminRestriction, authenticateJWT, toggleUserRestriction, toggleMentorRestriction };
+// Get user by ID
+const getUserById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findById(id).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    res.status(200).json(user);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+export  { registerUser, loginUser, getAllUsers, toggleAdminRestriction, authenticateJWT, toggleUserRestriction, toggleMentorRestriction, getUserById };

@@ -10,9 +10,9 @@ export const createBatch = async (req, res) => {
     // Validate admin
     const adminUser = await User.findById(admin);
     console.log('Admin user found:', adminUser);
-    if (!adminUser || adminUser.designation !== 'admin') {
+    if (!adminUser || (adminUser.designation !== 'admin' && adminUser.designation !== 'superadmin')) {
       console.log('Admin validation failed:', { adminUser: adminUser?.designation });
-      return res.status(400).json({ message: 'Assigned admin must have admin designation' });
+      return res.status(400).json({ message: 'Assigned admin must have admin or superadmin designation' });
     }
     
     // Validate mentor

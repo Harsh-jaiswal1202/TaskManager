@@ -55,38 +55,46 @@ export default function Dashboard() {
   
   const fetchCurrentAdmin = async () => {
     try {
+      // First, try to get the current user directly by ID
+      const userRes = await axios.get(`http://localhost:3001/api/user/${parentId}`, { withCredentials: true });
+      console.log('Current user from direct API call:', userRes.data);
+      
       const res = await axios.get("http://localhost:3001/api/user/all", { withCredentials: true });
+      const superadmins = res.data.superadmins || [];
       const admins = res.data.admins || [];
-      // Find the current admin by matching the parentId
-      const admin = admins.find(a => a._id === parentId);
+      // Find the current admin by matching the parentId in both superadmins and admins
+      const admin = [...superadmins, ...admins].find(a => a._id === parentId);
       setCurrentAdmin(admin);
       console.log('Current admin found:', admin);
+      console.log('All superadmins:', superadmins);
+      console.log('All admins:', admins);
+      console.log('Looking for parentId:', parentId);
     } catch (err) {
       console.error('Failed to fetch current admin:', err);
     }
   };
 
   useEffect(() => {
-    fetchCurrentAdmin();
-  }, []);
-
-  useEffect(() => {
     const id = Cookies.get("id");
-    if (id === "user") navigate("/dashboard");
+    const designation = Cookies.get("designation");
+    if (!id || !designation || (designation !== "admin" && designation !== "superadmin")) {
+      navigate("/login");
+      return;
+    }
     setLoading(true);
     axios
       .get("http://localhost:3001/api/categories/all", {
         withCredentials: true,
       })
       .then((res) => {
-        console.log("Categories fetched successfully:", res.data);
         setCategories(res.data);
         setLoading(false);
       })
       .catch((err) => {
-        console.error("Failed to fetch categories", err);
         setLoading(false);
       });
+    fetchCurrentAdmin();
+    // eslint-disable-next-line
   }, []);
 
   useEffect(() => {
@@ -195,10 +203,20 @@ export default function Dashboard() {
       // Optionally handle error
     }
   };
+  const [users, setUsers] = useState([]);
+  const fetchUsers = async () => {
+    try {
+      const res = await axios.get("http://localhost:3001/api/user/all", { withCredentials: true });
+      setUsers(res.data.users || []);
+    } catch (err) {
+      // Optionally handle error
+    }
+  };
 
   useEffect(() => {
     if (tab === 'mentors') fetchMentors();
     if (tab === 'batches') fetchBatches();
+    if (tab === 'users') fetchUsers();
   }, [tab]);
 
   const handleToggleMentorRestrict = async (mentorId) => {
@@ -315,7 +333,7 @@ export default function Dashboard() {
               >
                 Batches
               </button>
-              {/* Show parent id button only for admin, not super-admin */}
+              {/* Show parent id button only for admin, not superadmin */}
               {designation === "admin" && (
                 <div className="relative">
                   <button
@@ -335,7 +353,7 @@ export default function Dashboard() {
               )}
 
               <button
-                onClick={() => navigate("/coming-soon")}
+                onClick={() => setTab('users')}
                 className="flex items-center gap-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 sm:px-4 py-2 rounded-full shadow-lg hover:scale-105 hover:shadow-xl transition-all text-sm sm:text-base"
               >
                 <span>View users</span>
@@ -670,7 +688,7 @@ export default function Dashboard() {
           </div>
         )}
         {tab === 'batches' && (
-          <div className="w-full max-w-3xl mx-auto">
+          <div className="w-full">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-green-700">Batches</h2>
               <button
@@ -680,24 +698,39 @@ export default function Dashboard() {
                 + Create Batch
               </button>
             </div>
-            <div className="space-y-4">
-              {batches.length === 0 && <div className="text-gray-500">No batches found.</div>}
-              {batches.map((batch) => (
-                <div key={batch._id} className="flex items-center justify-between bg-gradient-to-r from-green-100 to-teal-100 rounded-xl px-4 py-3 shadow border border-green-200">
-                  <div>
-                    <div className="font-semibold text-green-800">{batch.name}</div>
-                    <div className="text-sm text-gray-600">Mentor: {batch.mentor?.username || 'N/A'}</div>
-                    <div className="text-sm text-gray-600">Users: {batch.users?.map(u => u.username).join(', ') || 'None'}</div>
-                  </div>
-                  <button
-                    onClick={() => handleDeleteBatch(batch._id)}
-                    disabled={toggling[batch._id]}
-                    className={`px-4 py-2 rounded-full font-semibold shadow transition-all text-sm sm:text-base focus:outline-none bg-red-500 hover:bg-red-600 text-white ${toggling[batch._id] ? 'opacity-60 cursor-not-allowed' : ''}`}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
+              {batches.length === 0 ? (
+                <div className="col-span-full text-center text-gray-500">No batches found.</div>
+              ) : (
+                batches.map((batch) => (
+                  <div
+                    key={batch._id}
+                    className="h-full bg-white/90 backdrop-blur-sm shadow-md rounded-2xl p-3 sm:p-6 hover:shadow-xl transition-all border-t-8 border-green-400 flex flex-col text-base sm:text-lg"
                   >
-                    {toggling[batch._id] ? 'Deleting...' : 'Delete'}
-                  </button>
-                </div>
-              ))}
+                    <div className="flex-1 flex flex-col items-start">
+                      <div className="text-2xl sm:text-4xl mb-2 sm:mb-3 text-green-600">
+                        📚
+                      </div>
+                      <h3 className="text-lg sm:text-xl font-bold text-gray-800 mb-2">
+                        {batch.name}
+                      </h3>
+                      <p className="text-sm sm:text-base text-gray-700 mt-2 font-semibold">
+                        Mentor: {batch.mentor?.username || 'N/A'}
+                      </p>
+                      <p className="text-sm sm:text-base text-gray-700 font-semibold">
+                        Users: {batch.users?.length || 0}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteBatch(batch._id)}
+                      disabled={toggling[batch._id]}
+                      className={`mt-3 sm:mt-4 w-full py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all hover:scale-105 ${toggling[batch._id] ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-500 hover:bg-red-600 text-white'}`}
+                    >
+                      {toggling[batch._id] ? 'Deleting...' : 'Delete Batch'}
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
             {/* Create Batch Modal */}
             {batchModal && (
@@ -749,6 +782,22 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+        {tab === 'users' && (
+          <div className="w-full max-w-3xl mx-auto">
+            <h2 className="text-xl font-bold mb-4 text-pink-700">Users</h2>
+            <div className="space-y-4">
+              {users.length === 0 && <div className="text-gray-500">No users found.</div>}
+              {users.map((user) => (
+                <div key={user._id} className="flex items-center justify-between bg-gradient-to-r from-pink-100 to-purple-100 rounded-xl px-4 py-3 shadow border border-pink-200">
+                  <div>
+                    <div className="font-semibold text-pink-800">{user.username}</div>
+                    <div className="text-sm text-gray-600">{user.email}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

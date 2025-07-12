@@ -19,7 +19,10 @@ export default function SuperAdminDashboard() {
   useEffect(() => {
     const id = Cookies.get("id");
     const designation = Cookies.get("designation");
-    if (id === "user" || designation !== "super-admin") navigate("/login");
+    if (!id || !designation || designation !== "superadmin") {
+      navigate("/login");
+      return;
+    }
     fetchUsers();
     fetchBatches();
     // eslint-disable-next-line
@@ -163,9 +166,9 @@ export default function SuperAdminDashboard() {
         {loading ? (
           <div className="text-center text-lg text-purple-500 font-semibold">Loading...</div>
         ) : (
-          <div className="w-full max-w-3xl mx-auto">
+          <div className="w-full">
             {view === "admins" && (
-              <div>
+              <div className="max-w-3xl mx-auto">
                 <h2 className="text-xl font-bold mb-4 text-purple-700">Admins</h2>
                 <div className="space-y-4">
                   {admins.length === 0 && <div className="text-gray-500">No admins found.</div>}
@@ -192,7 +195,7 @@ export default function SuperAdminDashboard() {
               </div>
             )}
             {view === "mentors" && (
-              <div>
+              <div className="max-w-3xl mx-auto">
                 <h2 className="text-xl font-bold mb-4 text-blue-700">Mentors</h2>
                 <div className="space-y-4">
                   {mentors.length === 0 && <div className="text-gray-500">No mentors found.</div>}
@@ -219,7 +222,7 @@ export default function SuperAdminDashboard() {
               </div>
             )}
             {view === "users" && (
-              <div>
+              <div className="max-w-3xl mx-auto">
                 <h2 className="text-xl font-bold mb-4 text-pink-700">Users</h2>
                 <div className="space-y-4">
                   {users.length === 0 && <div className="text-gray-500">No users found.</div>}
@@ -246,18 +249,37 @@ export default function SuperAdminDashboard() {
               </div>
             )}
             {view === "batches" && (
-              <div>
+              <div className="w-full">
                 <h2 className="text-xl font-bold mb-4 text-purple-700">Batches</h2>
-                <div className="space-y-4">
-                  {batches.length === 0 && <div className="text-gray-500">No batches found.</div>}
-                  {batches.map((batch) => (
-                    <div key={batch._id} className="bg-gradient-to-r from-purple-100 to-blue-100 rounded-xl px-4 py-3 shadow border border-purple-200">
-                      <div className="font-semibold text-purple-800">{batch.name}</div>
-                      <div className="text-sm text-gray-600">Admin: {batch.admin?.username || 'N/A'}</div>
-                      <div className="text-sm text-blue-600">Mentor: {batch.mentor?.username || 'N/A'}</div>
-                      <div className="text-sm text-gray-700">Users: {batch.users?.map(u => u.username).join(', ') || 'None'}</div>
-                    </div>
-                  ))}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
+                  {batches.length === 0 ? (
+                    <div className="col-span-full text-center text-gray-500">No batches found.</div>
+                  ) : (
+                    batches.map((batch) => (
+                      <div
+                        key={batch._id}
+                        className="h-full bg-white/90 backdrop-blur-sm shadow-md rounded-2xl p-3 sm:p-6 hover:shadow-xl transition-all border-t-8 border-purple-400 flex flex-col text-base sm:text-lg"
+                      >
+                        <div className="flex-1 flex flex-col items-start">
+                          <div className="text-2xl sm:text-4xl mb-2 sm:mb-3 text-purple-600">
+                            📚
+                          </div>
+                          <h3 className="text-lg sm:text-xl font-bold text-gray-800 mb-2">
+                            {batch.name}
+                          </h3>
+                          <p className="text-sm sm:text-base text-gray-700 mt-2 font-semibold">
+                            Admin: {batch.admin?.username || 'N/A'}
+                          </p>
+                          <p className="text-sm sm:text-base text-gray-700 font-semibold">
+                            Mentor: {batch.mentor?.username || 'N/A'}
+                          </p>
+                          <p className="text-sm sm:text-base text-gray-700 font-semibold">
+                            Users: {batch.users?.length || 0}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}
