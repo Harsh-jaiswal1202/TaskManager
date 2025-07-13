@@ -67,7 +67,7 @@ export default function ResponsesPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-100 via-purple-100 to-pink-200 p-4 sm:p-6">
-      <div className="max-w-3xl mx-auto bg-white/90 backdrop-blur-xl rounded-2xl p-4 sm:p-6 md:p-8 relative border-2 border-purple-200 shadow-lg overflow-hidden">
+      <div className="max-w-3xl mx-auto bg-[var(--card-bg)] backdrop-blur-xl rounded-2xl p-4 sm:p-6 md:p-8 relative border-2 border-[var(--border-color)] shadow-lg overflow-hidden">
         {/* Decorative Elements */}
         <div className="absolute top-0 right-0 w-16 h-16 sm:w-24 sm:h-24 bg-yellow-400/20 rounded-bl-full"></div>
         <div className="absolute bottom-0 left-0 w-12 h-12 sm:w-16 sm:h-16 bg-pink-400/20 rounded-tr-full"></div>

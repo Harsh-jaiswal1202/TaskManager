@@ -331,13 +331,13 @@ export default function Dashboard() {
       {/* Main Content */}
       <div className="relative z-10">
         {/* Gamified Navigation Bar */}
-        <nav className="relative bg-white/90 backdrop-blur-md shadow-lg rounded-2xl p-2 sm:p-4 mb-4 sm:mb-8 md:mb-12 border-2 border-purple-100/50 mt-0">
+        <nav className="relative bg-[var(--card-bg)] backdrop-blur-md shadow-lg rounded-2xl p-2 sm:p-4 mb-4 sm:mb-8 md:mb-12 border-2 border-[var(--border-color)] mt-0">
           <div className="flex flex-col md:flex-row justify-between items-center gap-3 sm:gap-4">
             <div className="flex items-center gap-2 sm:gap-3">
               <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600">
                 Quest Dashboard
               </h1>
-              <span className="text-lg sm:text-xl">🎯</span>
+              <span className="text-lg sm:text-xl">🛡️</span>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3">
               <button

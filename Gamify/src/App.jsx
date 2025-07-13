@@ -18,6 +18,7 @@ import SignupPage from "./pages/SignupPage";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import MentorDashboard from "./pages/MentorDashboard";
 import FeedbackPage from "./pages/FeedbackPage";
+import SettingsPage from "./pages/SettingsPage";
 
 function Root() {
   return (
@@ -36,6 +37,7 @@ function Root() {
               <Route path="/survey/:id" element={<SurveyPage />} />
               <Route path="/responses" element={<ResponsesPage />} />
               <Route path="/my-progress" element={<MyProgressPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
               <Route path="/task/create/:id" element={<CreateTaskPage />} />
               <Route path="/feedback/:batchId" element={<FeedbackPage />} />
               {/* Mentor Route */}

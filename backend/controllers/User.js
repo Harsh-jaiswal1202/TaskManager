@@ -160,6 +160,20 @@ const toggleMentorRestriction = async (req, res) => {
   }
 };
 
+// Add this function for updating user profile
+const updateUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const update = req.body;
+    // Optionally, prevent updating restricted fields like password here
+    const user = await User.findByIdAndUpdate(id, update, { new: true, runValidators: false });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
 // JWT auth middleware
 const authenticateJWT = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -190,4 +204,96 @@ const getUserById = async (req, res) => {
   }
 };
 
-export  { registerUser, loginUser, getAllUsers, toggleAdminRestriction, authenticateJWT, toggleUserRestriction, toggleMentorRestriction, getUserById };
+// Update password
+const updatePassword = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { currentPassword, newPassword } = req.body;
+    
+    // Verify the user is updating their own password
+    if (req.user.id !== id) {
+      return res.status(403).json({ message: 'You can only update your own password' });
+    }
+    
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Verify current password
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Current password is incorrect' });
+    }
+    
+    // Hash new password
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    await user.save();
+    
+    res.json({ message: 'Password updated successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Update email
+const updateEmail = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newEmail } = req.body;
+    
+    // Verify the user is updating their own email
+    if (req.user.id !== id) {
+      return res.status(403).json({ message: 'You can only update your own email' });
+    }
+    
+    // Check if email already exists
+    const existingUser = await User.findOne({ email: newEmail });
+    if (existingUser && existingUser._id.toString() !== id) {
+      return res.status(400).json({ message: 'Email already in use' });
+    }
+    
+    const user = await User.findByIdAndUpdate(id, { email: newEmail }, { new: true });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    res.json({ message: 'Email updated successfully', user });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// Delete account
+const deleteAccount = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { password } = req.body;
+    
+    // Verify the user is deleting their own account
+    if (req.user.id !== id) {
+      return res.status(403).json({ message: 'You can only delete your own account' });
+    }
+    
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Verify password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Password is incorrect' });
+    }
+    
+    // Delete the user
+    await User.findByIdAndDelete(id);
+    
+    res.json({ message: 'Account deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+export  { registerUser, loginUser, getAllUsers, toggleAdminRestriction, authenticateJWT, toggleUserRestriction, toggleMentorRestriction, getUserById, updateUser, updatePassword, updateEmail, deleteAccount };

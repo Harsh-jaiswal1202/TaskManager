@@ -43,8 +43,8 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 via-purple-100 to-pink-100 p-6">
-      <div className="bg-white/90 backdrop-blur-lg p-8 rounded-2xl shadow-xl w-full max-w-md text-center space-y-6">
-        <h2 className="text-2xl sm:text-3xl font-bold text-purple-700">Sign Up</h2>
+      <div className="bg-[var(--card-bg)] backdrop-blur-lg p-8 rounded-2xl shadow-xl w-full max-w-md text-center space-y-6">
+        <h2 className="text-2xl sm:text-3xl font-bold text-[var(--primary-color)]">Sign Up</h2>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <input
             type="text"
@@ -53,7 +53,7 @@ export default function SignupPage() {
             value={form.name}
             onChange={handleChange}
             required
-            className="w-full px-4 py-3 rounded-lg border border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-700"
+            className="w-full px-4 py-3 rounded-lg border border-[var(--border-color)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)] text-[var(--text-color)]"
           />
           <input
             type="email"
@@ -62,14 +62,14 @@ export default function SignupPage() {
             value={form.email}
             onChange={handleChange}
             required
-            className="w-full px-4 py-3 rounded-lg border border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-700"
+            className="w-full px-4 py-3 rounded-lg border border-[var(--border-color)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)] text-[var(--text-color)]"
           />
           <select
             name="designation"
             value={form.designation}
             onChange={handleChange}
             required
-            className="w-full px-4 py-3 rounded-lg border border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-700"
+            className="w-full px-4 py-3 rounded-lg border border-[var(--border-color)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)] text-[var(--text-color)]"
           >
             <option value="">-- Select Designation --</option>
             <option value="admin">Admin</option>
@@ -85,7 +85,7 @@ export default function SignupPage() {
               value={form.adminId}
               onChange={handleChange}
               required
-              className="w-full px-4 py-3 rounded-lg border border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-700"
+              className="w-full px-4 py-3 rounded-lg border border-[var(--border-color)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)] text-[var(--text-color)]"
             />
           )}
           <input
@@ -95,7 +95,7 @@ export default function SignupPage() {
             value={form.password}
             onChange={handleChange}
             required
-            className="w-full px-4 py-3 rounded-lg border border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-700"
+            className="w-full px-4 py-3 rounded-lg border border-[var(--border-color)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)] text-[var(--text-color)]"
           />
           <input
             type="password"
@@ -104,7 +104,7 @@ export default function SignupPage() {
             value={form.confirmPassword}
             onChange={handleChange}
             required
-            className="w-full px-4 py-3 rounded-lg border border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-400 text-gray-700"
+            className="w-full px-4 py-3 rounded-lg border border-[var(--border-color)] focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)] text-[var(--text-color)]"
           />
           {error && <div className="text-red-500 text-sm font-semibold">{error}</div>}
           <button

@@ -62,7 +62,7 @@ export default function MyProgressPage() {
         ))}
       </div>
 
-      <div className="relative z-10 bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl border-2 border-white/30 w-full max-w-2xl overflow-hidden">
+      <div className="relative z-10 bg-[var(--card-bg)] backdrop-blur-sm rounded-3xl shadow-2xl border-2 border-[var(--border-color)] w-full max-w-2xl overflow-hidden">
         {/* Header with confetti */}
         <div className="relative bg-gradient-to-r from-purple-500 to-pink-500 p-6 text-center">
           {completedTasks.length > 3 && (

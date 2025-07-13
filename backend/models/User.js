@@ -11,6 +11,9 @@ const userSchema = new mongoose.Schema({
   avatar: String,
   points: { type: Number, default: 0 },
   restricted: { type: Boolean, default: false },
+  theme: { type: String, enum: ['light', 'dark', 'system'], default: 'light' },
+  emailNotifications: { type: Boolean, default: true },
+  inAppNotifications: { type: Boolean, default: true },
   completedTasks: [
     {
       task: { type: mongoose.Schema.Types.ObjectId, ref: "Task" },
