@@ -1,5 +1,5 @@
 import express from 'express';
-import { createBatch, getBatches, assignMentor, enrollUser, removeUser, deleteBatch, getBatchesForUser, getAvailableBatchesForUser, editBatch } from '../controllers/Batch.js';
+import { createBatch, getBatches, assignMentor, enrollUser, removeUser, deleteBatch, getBatchesForUser, getAvailableBatchesForUser, editBatch, getBatchById } from '../controllers/Batch.js';
 import { authenticateJWT } from '../controllers/User.js';
 
 const router = express.Router();
@@ -13,5 +13,6 @@ router.delete('/delete/:id', deleteBatch);
 router.patch('/edit/:id', authenticateJWT, editBatch);
 router.get('/user', getBatchesForUser);
 router.get('/available', getAvailableBatchesForUser);
+router.get('/:id', getBatchById);
 
 export default router; 

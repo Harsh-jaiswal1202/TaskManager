@@ -19,6 +19,7 @@ import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import MentorDashboard from "./pages/MentorDashboard";
 import FeedbackPage from "./pages/FeedbackPage";
 import SettingsPage from "./pages/SettingsPage";
+import BatchAnalyticsPage from './pages/BatchAnalyticsPage';
 
 function Root() {
   return (
@@ -46,6 +47,7 @@ function Root() {
               {/* Admin Routes */}
               <Route path="/admin/task/:id" element={<AdminTaskPage />} />
               <Route path="/admin/dashboard" element={<AdminDashboard />} />
+              <Route path="/admin/batch/:id/analytics" element={<BatchAnalyticsPage />} />
               <Route path="/coming-soon" element={<ComingSoon />} />
               
               {/* Super Admin Route */}

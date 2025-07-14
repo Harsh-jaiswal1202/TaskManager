@@ -48,6 +48,16 @@ const getAllTasks = async (req, res) => {
   }
 };
 
+const getAllTasksForBatch = async (req, res) => {
+  try {
+    const tasks = await Task.find().populate('category');
+    res.status(200).json(tasks);
+  } catch (error) {
+    console.error("Error fetching all tasks:", error);
+    res.status(500).json({ message: "Failed to fetch all tasks", error });
+  }
+};
+
 async function createTask(req, res) {
   try {
     const { name, description, details, category, difficulty } = req.body;
@@ -109,6 +119,7 @@ async function editTask(req, res) {
 
 export {
   getAllTasks,
+  getAllTasksForBatch,
   createTask,
   deleteTask,
   editTask,

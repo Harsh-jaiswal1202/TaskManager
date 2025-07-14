@@ -4,8 +4,28 @@ import User from '../models/User.js';
 // Create a new batch
 export const createBatch = async (req, res) => {
   try {
-    const { name, admin, mentor } = req.body;
-    console.log('Received batch creation request:', { name, admin, mentor });
+    const { 
+      name, 
+      description, 
+      admin, 
+      mentor, 
+      industryFocus, 
+      difficultyLevel, 
+      estimatedDuration, 
+      learningObjectives, 
+      tasks 
+    } = req.body;
+    console.log('Received batch creation request:', { 
+      name, 
+      description, 
+      admin, 
+      mentor, 
+      industryFocus, 
+      difficultyLevel, 
+      estimatedDuration, 
+      learningObjectives, 
+      tasks 
+    });
     
     // Validate admin
     const adminUser = await User.findById(admin);
@@ -23,7 +43,17 @@ export const createBatch = async (req, res) => {
       return res.status(400).json({ message: 'Assigned mentor must have mentor designation' });
     }
     
-    const batch = await Batch.create({ name, admin, mentor });
+    const batch = await Batch.create({ 
+      name, 
+      description, 
+      admin, 
+      mentor, 
+      industryFocus, 
+      difficultyLevel, 
+      estimatedDuration, 
+      learningObjectives, 
+      tasks 
+    });
     console.log('Batch created successfully:', batch);
     res.status(201).json(batch);
   } catch (error) {
@@ -180,5 +210,18 @@ export const editBatch = async (req, res) => {
     res.status(200).json(batch);
   } catch (error) {
     res.status(500).json({ message: 'Failed to edit batch', error: error.message });
+  }
+}; 
+
+// Get a single batch by ID
+export const getBatchById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const batch = await Batch.findById(id)
+      .populate('admin mentor users tasks');
+    if (!batch) return res.status(404).json({ message: 'Batch not found' });
+    res.status(200).json(batch);
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch batch', error: error.message });
   }
 }; 

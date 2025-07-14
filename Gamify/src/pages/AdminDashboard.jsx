@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { FaSignOutAlt } from "react-icons/fa";
@@ -10,9 +10,12 @@ import EmojiPicker from "emoji-picker-react";
 import "../index.css";
 import axios from "axios";
 import { restrictMentor, deleteBatch } from '../services/api';
+import EnhancedBatchModal from '../components/EnhancedBatchModal';
+import BatchAnalytics from '../components/BatchAnalytics';
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [showAddModal, setShowAddModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [categories, setCategories] = useState([]);
@@ -38,8 +41,19 @@ export default function Dashboard() {
   const [batchModal, setBatchModal] = useState(false);
   const [batchName, setBatchName] = useState("");
   const [batchMentor, setBatchMentor] = useState("");
+  const [batchDescription, setBatchDescription] = useState("");
+  const [batchIndustryFocus, setBatchIndustryFocus] = useState("");
+  const [batchDifficultyLevel, setBatchDifficultyLevel] = useState("Beginner");
+  const [batchEstimatedDuration, setBatchEstimatedDuration] = useState(4);
+  const [batchLearningObjectives, setBatchLearningObjectives] = useState([""]);
+  const [batchTasks, setBatchTasks] = useState([]);
+  const [availableTasks, setAvailableTasks] = useState([]);
   const [batchLoading, setBatchLoading] = useState(false);
   const [batchError, setBatchError] = useState("");
+  const [showEnhancedBatchModal, setShowEnhancedBatchModal] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
+  const [selectedBatchForAnalytics, setSelectedBatchForAnalytics] = useState(null);
+  const [allTasks, setAllTasks] = useState([]);
   const parentId = Cookies.get("id");
   const designation = Cookies.get("designation");
   const isValidParentId = parentId && parentId.trim() && parentId !== "undefined" && parentId !== "null";
@@ -96,6 +110,15 @@ export default function Dashboard() {
     fetchCurrentAdmin();
     // eslint-disable-next-line
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tabParam = params.get('tab');
+    if (tabParam && ['categories', 'mentors', 'batches', 'users'].includes(tabParam)) {
+      setTab(tabParam);
+    }
+    // eslint-disable-next-line
+  }, [location.search]);
 
   useEffect(() => {
     if (editModal.isOpen) {
@@ -213,11 +236,21 @@ export default function Dashboard() {
     }
   };
 
+  const fetchAllTasks = async () => {
+    try {
+      const res = await axios.get("http://localhost:3001/api/task/all", { withCredentials: true });
+      setAllTasks(res.data || []);
+    } catch (err) {
+      console.error('Failed to fetch tasks:', err);
+    }
+  };
+
   useEffect(() => {
     if (tab === 'mentors') fetchMentors();
     if (tab === 'batches') fetchBatches();
     if (tab === 'users') fetchUsers();
-  }, [tab]);
+    if (showEnhancedBatchModal) fetchAllTasks();
+  }, [tab, showEnhancedBatchModal]);
 
   const handleToggleMentorRestrict = async (mentorId) => {
     setToggling((prev) => ({ ...prev, [mentorId]: true }));
@@ -255,8 +288,14 @@ export default function Dashboard() {
     // Debug logging
     console.log('Creating batch with data:', {
       name: batchName,
+      description: batchDescription,
       admin: adminId,
-      mentor: batchMentor
+      mentor: batchMentor,
+      industryFocus: batchIndustryFocus,
+      difficultyLevel: batchDifficultyLevel,
+      estimatedDuration: batchEstimatedDuration,
+      learningObjectives: batchLearningObjectives.filter(obj => obj.trim()),
+      tasks: batchTasks
     });
     console.log('Current user designation:', designation);
     console.log('Current user ID (parentId):', parentId);
@@ -265,14 +304,26 @@ export default function Dashboard() {
     try {
       const response = await axios.post("http://localhost:3001/api/batch/create", {
         name: batchName,
+        description: batchDescription.trim(),
         admin: adminId,
         mentor: batchMentor,
+        industryFocus: batchIndustryFocus.trim(),
+        difficultyLevel: batchDifficultyLevel,
+        estimatedDuration: batchEstimatedDuration,
+        learningObjectives: batchLearningObjectives.filter(obj => obj.trim()),
+        tasks: batchTasks
       }, { withCredentials: true });
       
       console.log('Batch created successfully:', response.data);
       setBatchModal(false);
       setBatchName("");
       setBatchMentor("");
+      setBatchDescription("");
+      setBatchIndustryFocus("");
+      setBatchDifficultyLevel("Beginner");
+      setBatchEstimatedDuration(4);
+      setBatchLearningObjectives([""]);
+      setBatchTasks([]);
       fetchBatches();
     } catch (err) {
       console.error('Batch creation error:', err);
@@ -305,6 +356,55 @@ export default function Dashboard() {
       alert('Failed to update batch.');
     }
     setEditLoading(false);
+  };
+
+  const [editBatch, setEditBatch] = useState(null); // holds batch object if editing, null if creating
+  const [isEditMode, setIsEditMode] = useState(false);
+
+  const handleEnhancedBatchSubmit = async (data) => {
+    setBatchLoading(true);
+    setBatchError("");
+    try {
+      const token = Cookies.get('authToken');
+      if (data.isEditMode && data.batchId) {
+        // Update batch
+        await axios.patch(`http://localhost:3001/api/batch/edit/${data.batchId}`, {
+          name: data.name,
+          description: data.description,
+          mentor: data.mentor,
+          industryFocus: data.industryFocus,
+          difficultyLevel: data.difficultyLevel,
+          estimatedDuration: data.estimatedDuration,
+          learningObjectives: data.learningObjectives,
+          tasks: data.selectedTasks
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      } else {
+        // Create batch
+        await axios.post('http://localhost:3001/api/batch/create', {
+          name: data.name,
+          description: data.description,
+          admin: parentId,
+          mentor: data.mentor,
+          industryFocus: data.industryFocus,
+          difficultyLevel: data.difficultyLevel,
+          estimatedDuration: data.estimatedDuration,
+          learningObjectives: data.learningObjectives,
+          tasks: data.selectedTasks
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+      setShowEnhancedBatchModal(false);
+      setEditBatch(null);
+      setIsEditMode(false);
+      fetchBatches();
+    } catch (err) {
+      setBatchError(err.response?.data?.message || 'Failed to save batch.');
+    } finally {
+      setBatchLoading(false);
+    }
   };
 
   return (
@@ -717,10 +817,15 @@ export default function Dashboard() {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-green-700">Batches</h2>
               <button
-                onClick={() => { setBatchModal(true); fetchMentors(); }}
-                className="bg-gradient-to-r from-green-500 to-teal-500 text-white px-4 py-2 rounded-full shadow hover:scale-105 transition-all font-semibold"
+                onClick={() => {
+                  setShowEnhancedBatchModal(true);
+                  setIsEditMode(false);
+                  setEditBatch(null);
+                  fetchMentors();
+                }}
+                className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-full shadow hover:scale-105 transition-all font-semibold"
               >
-                + Create Batch
+                🚀 Create Batch
               </button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
@@ -749,9 +854,20 @@ export default function Dashboard() {
                     <div className="flex gap-2 mt-4">
                       <button
                         className="flex items-center gap-1 px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600 text-xs font-semibold"
-                        onClick={() => handleEditBatch(batch)}
+                        onClick={() => {
+                          setEditBatch(batch);
+                          setIsEditMode(true);
+                          setShowEnhancedBatchModal(true);
+                          fetchMentors();
+                        }}
                       >
                         <FaEdit /> Edit
+                      </button>
+                      <button
+                        className="flex items-center gap-1 px-3 py-1 rounded bg-purple-500 text-white hover:bg-purple-600 text-xs font-semibold"
+                        onClick={() => navigate(`/admin/batch/${batch._id}/analytics`)}
+                      >
+                        📊 Analytics
                       </button>
                       <button
                         onClick={() => handleDeleteBatch(batch._id)}
@@ -1034,6 +1150,50 @@ export default function Dashboard() {
             </motion.div>
           </motion.div>
         </AnimatePresence>
+      )}
+
+      {/* Enhanced Batch Modal */}
+      {showEnhancedBatchModal && (
+        <EnhancedBatchModal
+          isOpen={showEnhancedBatchModal}
+          onClose={() => { setShowEnhancedBatchModal(false); setEditBatch(null); setIsEditMode(false); }}
+          onSubmit={handleEnhancedBatchSubmit}
+          mentors={mentors}
+          tasks={allTasks}
+          loading={batchLoading}
+          error={batchError}
+          isEditMode={isEditMode}
+          initialBatchData={editBatch}
+        />
+      )}
+
+      {/* Analytics Modal */}
+      {showAnalytics && selectedBatchForAnalytics && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowAnalytics(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gradient-to-r from-purple-600 to-pink-600 text-white p-6 rounded-t-2xl">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-2xl font-bold">Batch Analytics</h2>
+                  <p className="text-purple-100 mt-1">{selectedBatchForAnalytics.name}</p>
+                </div>
+                <button
+                  onClick={() => setShowAnalytics(false)}
+                  className="text-white hover:text-purple-200 text-2xl font-bold"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <BatchAnalytics 
+                batchData={selectedBatchForAnalytics}
+                studentProgress={[]}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Add these to your global CSS */}
