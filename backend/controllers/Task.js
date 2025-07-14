@@ -1,5 +1,6 @@
 import Task from "../models/Task.js";
 import Category from "../models/Category.js";
+import User from "../models/User.js";
 
 const startTask = async (req, res) => {
   try {
@@ -22,6 +23,8 @@ const startTask = async (req, res) => {
 const completeTask = async (req, res) => {
   try {
     const { taskId } = req.params;
+    const { userId } = req.body; // Expect userId in the request body
+
     const task = await Task.findByIdAndUpdate(
       taskId,
       { $inc: { completedCount: 1 } },
@@ -30,6 +33,12 @@ const completeTask = async (req, res) => {
     if (!task) {
       return res.status(404).json({ message: "Task not found" });
     }
+
+    // Award XPS to the user
+    if (userId) {
+      await User.findByIdAndUpdate(userId, { $inc: { xps: 50 } }); // 50 XPS per task
+    }
+
     res.status(200).json(task);
   } catch (error) {
     console.error("Error completing task:", error);

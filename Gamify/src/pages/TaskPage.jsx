@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
+import Cookies from "js-cookie";
 
 const categoryColors = {
   1: {
@@ -170,11 +171,13 @@ export default function TaskPage() {
     if (alreadyCompleted) return;
 
     try {
-      // ✅ Backend call to increment completedCount
+      const userId = Cookies.get("id");
       const res = await fetch(
         `http://localhost:3001/api/task/complete/${task._id}`,
         {
           method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId }),
         }
       );
 

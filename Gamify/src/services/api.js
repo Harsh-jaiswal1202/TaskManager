@@ -42,10 +42,10 @@ export const categoryAPI = {
 
 // Task API
 export const taskAPI = {
-  getAll: (id) => api.get(`/task/${id}`),
-  create: (data) => api.post('/task/create', data),
-  edit: (id, data) => api.patch(`/task/edit/${id}`, data),
-  delete: (id) => api.delete(`/task/delete/${id}`)
+  getAll: () => api.get('/tasks/all'),
+  create: (data) => api.post('/tasks/create', data),
+  edit: (id, data) => api.patch(`/tasks/edit/${id}`, data),
+  delete: (id) => api.delete(`/tasks/delete/${id}`)
 };
 
 // Restrict/Unrestrict Admin (Superadmin only)

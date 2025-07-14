@@ -14,7 +14,7 @@ export default function StudentBatchAnalyticsPage() {
 
   useEffect(() => {
     setLoading(true);
-    axios.get(`http://localhost:3001/api/batch/${id}`)
+    axios.get(`http://localhost:3001/api/batches/${id}`)
       .then(res => {
         setBatch(res.data);
         setLoading(false);

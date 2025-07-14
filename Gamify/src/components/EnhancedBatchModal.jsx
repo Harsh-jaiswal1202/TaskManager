@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { FaPlus, FaTrash, FaIndustry, FaGraduationCap, FaTasks, FaUsers } from 'react-icons/fa';
+import { taskAPI } from '../services/api';
 
 export default function EnhancedBatchModal({ 
   isOpen, 
@@ -9,11 +10,14 @@ export default function EnhancedBatchModal({
   mentors, 
   admins = [],
   tasks, 
+  tasksLoading = false,
   loading, 
   error, 
   isEditMode = false, 
   initialBatchData = null, 
-  isSuperAdmin = false
+  isSuperAdmin = false,
+  onLessonAdded,
+  categories = [] // <-- add categories prop
 }) {
   const [formData, setFormData] = useState({
     name: '',
@@ -26,6 +30,23 @@ export default function EnhancedBatchModal({
     learningObjectives: [''],
     selectedTasks: []
   });
+
+  // Add missing state for lesson form
+  const [showLessonForm, setShowLessonForm] = useState(false);
+  // Add 'category' and 'difficulty' to lessonForm state
+  const [lessonForm, setLessonForm] = useState({
+    name: '',
+    description: '',
+    videoUrl: '',
+    contentType: 'video',
+    details: '',
+    category: '',
+    difficulty: 'Easy',
+  });
+  const [lessonLoading, setLessonLoading] = useState(false);
+  const [lessonError, setLessonError] = useState('');
+  const [pendingLesson, setPendingLesson] = useState(null);
+  const [displayedTasks, setDisplayedTasks] = useState([]);
 
   useEffect(() => {
     if (isEditMode && initialBatchData) {
@@ -54,6 +75,24 @@ export default function EnhancedBatchModal({
       });
     }
   }, [isEditMode, initialBatchData, isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setDisplayedTasks(tasks || []);
+    }
+  }, [isOpen, tasks]);
+
+  useEffect(() => {
+    if (
+      showLessonForm &&
+      pendingLesson &&
+      tasks.some(t => t.name === pendingLesson.name && t.description === pendingLesson.description)
+    ) {
+      setLessonForm({ name: '', description: '', videoUrl: '', contentType: 'video', details: '' });
+      setShowLessonForm(false);
+      setPendingLesson(null);
+    }
+  }, [tasks, pendingLesson, showLessonForm]);
 
   const industryOptions = [
     'Web Development',
@@ -101,6 +140,45 @@ export default function EnhancedBatchModal({
     }));
   };
 
+  const handleLessonInputChange = (field, value) => {
+    setLessonForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleLessonSubmit = async (e) => {
+    e.preventDefault();
+    setLessonLoading(true);
+    setLessonError('');
+    try {
+      const data = {
+        name: lessonForm.name,
+        description: lessonForm.description,
+        details: lessonForm.details || lessonForm.description,
+        videoUrl: lessonForm.videoUrl,
+        contentType: lessonForm.contentType,
+      };
+      const res = await taskAPI.create(data);
+      if (res.data && res.data._id) {
+        setDisplayedTasks(prev => {
+          const updated = [...prev, res.data];
+          console.log('Added lesson:', res.data);
+          console.log('Displayed tasks after add:', updated);
+          return updated;
+        });
+        setFormData(prev => ({
+          ...prev,
+          selectedTasks: [...prev.selectedTasks, res.data._id]
+        }));
+        setLessonForm({ name: '', description: '', videoUrl: '', contentType: 'video', details: '' });
+        setShowLessonForm(false);
+        // Optionally call onLessonAdded to let parent sync in background
+        if (onLessonAdded) onLessonAdded();
+      }
+    } catch (err) {
+      setLessonError('Failed to create lesson. Please check all fields and try again.');
+    }
+    setLessonLoading(false);
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     onSubmit({
@@ -112,6 +190,30 @@ export default function EnhancedBatchModal({
   };
 
   if (!isOpen) return null;
+
+  if (tasksLoading) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 text-center">
+          <div className="text-xl font-bold text-purple-700 mb-4">Loading lessons...</div>
+          <div className="loader mx-auto" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!Array.isArray(tasks)) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 text-center">
+          <div className="text-xl font-bold text-red-700 mb-4">Failed to load lessons. Please try again.</div>
+          <button onClick={onClose} className="mt-4 px-4 py-2 bg-purple-600 text-white rounded">Close</button>
+        </div>
+      </div>
+    );
+  }
+
+  console.log('Modal re-render', displayedTasks.length, displayedTasks.map(t => t.name));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -289,35 +391,93 @@ export default function EnhancedBatchModal({
               <label className="block text-sm font-semibold text-gray-700">
                 Select Tasks for This Batch
               </label>
+              <button
+                type="button"
+                className="ml-auto px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-xs font-semibold"
+                onClick={() => setShowLessonForm(f => !f)}
+              >
+                {showLessonForm ? 'Cancel' : 'Add New Lesson'}
+              </button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-60 overflow-y-auto">
-              {tasks.map(task => (
-                <div
-                  key={task._id}
-                  className={`p-4 border rounded-lg cursor-pointer transition-all ${
-                    formData.selectedTasks.includes(task._id)
-                      ? 'border-purple-500 bg-purple-50'
-                      : 'border-gray-200 hover:border-purple-300'
-                  }`}
-                  onClick={() => toggleTaskSelection(task._id)}
+            {showLessonForm && (
+              <form onSubmit={handleLessonSubmit} className="mb-4 p-4 border rounded-lg bg-purple-50">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <input
+                    type="text"
+                    placeholder="Lesson Name"
+                    value={lessonForm.name}
+                    onChange={e => handleLessonInputChange('name', e.target.value)}
+                    className="px-3 py-2 border rounded"
+                    required
+                  />
+                  <input
+                    type="text"
+                    placeholder="Video URL (optional)"
+                    value={lessonForm.videoUrl}
+                    onChange={e => handleLessonInputChange('videoUrl', e.target.value)}
+                    className="px-3 py-2 border rounded"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Description"
+                    value={lessonForm.description}
+                    onChange={e => handleLessonInputChange('description', e.target.value)}
+                    className="px-3 py-2 border rounded"
+                    required
+                  />
+                  <select
+                    value={lessonForm.contentType}
+                    onChange={e => handleLessonInputChange('contentType', e.target.value)}
+                    className="px-3 py-2 border rounded"
+                  >
+                    <option value="video">Video</option>
+                    <option value="document">Document</option>
+                    <option value="quiz">Quiz</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <button
+                  type="submit"
+                  className="mt-3 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+                  disabled={lessonLoading}
                 >
-                  <div className="flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      checked={formData.selectedTasks.includes(task._id)}
-                      onChange={() => toggleTaskSelection(task._id)}
-                      className="mt-1"
-                    />
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-gray-800">{task.name}</h4>
-                      <p className="text-sm text-gray-600 mt-1">{task.description}</p>
-                      <span className="inline-block mt-2 px-2 py-1 text-xs font-semibold bg-blue-100 text-blue-800 rounded">
-                        {task.difficulty}
-                      </span>
+                  {lessonLoading ? 'Adding...' : 'Add Lesson'}
+                </button>
+                {lessonError && <div className="text-red-600 mt-2">{lessonError}</div>}
+              </form>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-60 overflow-y-auto">
+              {displayedTasks.length === 0 ? (
+                <div className="col-span-full text-center text-gray-500 py-8">No lessons found. Add a new lesson to get started.</div>
+              ) : (
+                displayedTasks.map(task => (
+                  <div
+                    key={task._id}
+                    className={`p-4 border rounded-lg cursor-pointer transition-all ${
+                      formData.selectedTasks.includes(task._id)
+                        ? 'border-purple-500 bg-purple-50'
+                        : 'border-gray-200 hover:border-purple-300'
+                    }`}
+                    onClick={() => toggleTaskSelection(task._id)}
+                  >
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={formData.selectedTasks.includes(task._id)}
+                        onChange={() => toggleTaskSelection(task._id)}
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-gray-800">{task.name}</h4>
+                        <p className="text-sm text-gray-600 mt-1">{task.description}</p>
+                        <span className="inline-block mt-2 px-2 py-1 text-xs font-semibold bg-blue-100 text-blue-800 rounded">
+                          {task.difficulty}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
 

@@ -37,7 +37,7 @@ connect("mongodb://localhost:27017/Tasks")
 // Routes
 app.use("/api/categories", CategoryRoutes);
 app.use("/api/tasks", TaskRoutes);
-app.use("/api/users", UserRoutes);
+app.use("/api/user", UserRoutes);
 app.use("/api/batches", BatchRoutes);
 app.use("/api/feedback", FeedbackRoutes);
 // Optional test route

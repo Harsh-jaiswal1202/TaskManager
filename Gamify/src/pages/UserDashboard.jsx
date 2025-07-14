@@ -46,6 +46,7 @@ export default function Dashboard() {
   const [showAvatarModal, setShowAvatarModal] = useState(false);
   // Add a loading state for avatar deletion
   const [avatarDeleting, setAvatarDeleting] = useState(false);
+  const [xps, setXps] = useState(0);
 
   useEffect(() => {
     if (showBatchDropdown && batchesBtnRef.current) {
@@ -64,6 +65,11 @@ export default function Dashboard() {
       navigate("/login");
       return;
     }
+
+    // Fetch user XPS
+    axios.get(`http://localhost:3001/api/user/${id}`)
+      .then(res => setXps(res.data.xps || 0))
+      .catch(() => setXps(0));
 
     const today = new Date().toDateString();
     const lastGlobalReset = localStorage.getItem("lastGlobalReset");
@@ -167,7 +173,7 @@ export default function Dashboard() {
   const handleEnroll = (batchId) => {
     const userId = Cookies.get('id');
     setEnrolling((prev) => ({ ...prev, [batchId]: true }));
-    axios.post('http://localhost:3001/api/batches/enroll-user', { batchId, userId })
+    axios.post(`http://localhost:3001/api/batches/${batchId}/enroll`, { userId })
       .then(() => {
         fetchMyBatches();
         fetchAvailableBatches();
@@ -618,7 +624,7 @@ export default function Dashboard() {
 
                 <div className="flex items-center gap-2 bg-blue-500/10 border-2 border-blue-500/30 text-blue-700 px-4 py-2 rounded-full font-bold shadow-md">
                   <span className="text-lg">✨</span>
-                  <span>XPS: {points}</span>
+                  <span>XPS: {xps}</span>
                 </div>
                 {/* Absolute Sign Out Button */}
                 <div className="relative" style={{ display: 'inline-block' }}>
@@ -643,10 +649,11 @@ export default function Dashboard() {
                   </button>
                   {/* Profile Menu Dropdown (fixed, flush right, below button) */}
                   {showProfileMenuModal && (
-                    <div
-                      className="fixed z-[99999] bg-white shadow-2xl rounded-xl flex flex-col py-6 px-6"
-                      style={{ top: `${profileMenuPos.top}px`, right: 0, width: '220px', minHeight: '260px' }}
+                    <PortalDropdown
+                      className="z-[100000] bg-white shadow-2xl rounded-xl flex flex-col py-6 px-6"
+                      style={{ top: `${profileMenuPos.top}px`, right: 0, width: '220px', minHeight: '260px', position: 'fixed' }}
                     >
+                      {/* Increased z-index and now using PortalDropdown to guarantee above all content */}
                       <button
                         className="absolute top-3 right-3 text-gray-400 hover:text-purple-600 text-2xl font-bold"
                         onClick={() => setShowProfileMenuModal(false)}
@@ -686,7 +693,7 @@ export default function Dashboard() {
                           Sign Out
                         </button>
                       </div>
-                    </div>
+                    </PortalDropdown>
                   )}
                 </div>
               </div>
@@ -838,6 +845,12 @@ export default function Dashboard() {
                         )}
                       </div>
                       <button
+                        onClick={() => navigate(`/batch/${batch._id}/course`)}
+                        className="mt-3 sm:mt-4 w-full py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all hover:scale-105 bg-gradient-to-r from-green-500 to-teal-500 text-white"
+                      >
+                        View Course
+                      </button>
+                      <button
                         onClick={() => navigate(`/batch/${batch._id}/analytics`)}
                         className="mt-3 sm:mt-4 w-full py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all hover:scale-105 bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                       >
@@ -911,7 +924,7 @@ export default function Dashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-gray-700 font-semibold">Total Points:</p>
-                    <p className="text-base text-gray-900">{points}</p>
+                    <p className="text-base text-gray-900">{xps}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-700 font-semibold">Completed Tasks:</p>
@@ -949,7 +962,7 @@ export default function Dashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-gray-700 font-semibold">Total Points:</p>
-                    <p className="text-base text-gray-900">{points}</p>
+                    <p className="text-base text-gray-900">{xps}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-700 font-semibold">Completed Tasks:</p>

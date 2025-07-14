@@ -38,9 +38,7 @@ export default function BatchAnalyticsPage() {
       </button>
       <h1 className="text-3xl font-bold mb-6 text-purple-700">Batch Analytics: {batch.name}</h1>
       <BatchAnalytics batchData={batch} studentProgress={[]} />
-      <div className="mt-10">
-        <BatchChat batchId={batch._id} />
-      </div>
+      {/* Removed BatchChat from analytics page as requested */}
     </div>
   );
 } 

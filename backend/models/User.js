@@ -9,7 +9,7 @@ const userSchema = new mongoose.Schema({
   parentId: { type: String },
   adminId: { type: String, unique: true, sparse: true }, // Only for admins
   avatar: String,
-  points: { type: Number, default: 0 },
+  xps: { type: Number, default: 0 },
   restricted: { type: Boolean, default: false },
   theme: { type: String, enum: ['light', 'dark', 'system'], default: 'light' },
   emailNotifications: { type: Boolean, default: true },

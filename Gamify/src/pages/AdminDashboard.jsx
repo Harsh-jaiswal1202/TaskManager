@@ -54,6 +54,7 @@ export default function Dashboard() {
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [selectedBatchForAnalytics, setSelectedBatchForAnalytics] = useState(null);
   const [allTasks, setAllTasks] = useState([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
   const parentId = Cookies.get("id");
   const designation = Cookies.get("designation");
   const isValidParentId = parentId && parentId.trim() && parentId !== "undefined" && parentId !== "null";
@@ -70,10 +71,10 @@ export default function Dashboard() {
   const fetchCurrentAdmin = async () => {
     try {
       // First, try to get the current user directly by ID
-      const userRes = await axios.get(`http://localhost:3001/api/users/${parentId}`, { withCredentials: true });
+      const userRes = await axios.get(`http://localhost:3001/api/user/${parentId}`, { withCredentials: true });
       console.log('Current user from direct API call:', userRes.data);
       
-      const res = await axios.get("http://localhost:3001/api/users/all", { withCredentials: true });
+      const res = await axios.get("http://localhost:3001/api/user/all", { withCredentials: true });
       const superadmins = res.data.superadmins || [];
       const admins = res.data.admins || [];
       // Find the current admin by matching the parentId in both superadmins and admins
@@ -212,7 +213,7 @@ export default function Dashboard() {
 
   const fetchMentors = async () => {
     try {
-      const res = await axios.get("http://localhost:3001/api/users/all", { withCredentials: true });
+      const res = await axios.get("http://localhost:3001/api/user/all", { withCredentials: true });
       setMentors(res.data.mentors || []);
     } catch (err) {
       // Optionally handle error
@@ -229,7 +230,7 @@ export default function Dashboard() {
   const [users, setUsers] = useState([]);
   const fetchUsers = async () => {
     try {
-      const res = await axios.get("http://localhost:3001/api/users/all", { withCredentials: true });
+      const res = await axios.get("http://localhost:3001/api/user/all", { withCredentials: true });
       setUsers(res.data.users || []);
     } catch (err) {
       // Optionally handle error
@@ -237,12 +238,15 @@ export default function Dashboard() {
   };
 
   const fetchAllTasks = async () => {
+    setTasksLoading(true);
     try {
-      const res = await axios.get("http://localhost:3001/api/task/all", { withCredentials: true });
+      const res = await axios.get("http://localhost:3001/api/tasks/all", { withCredentials: true });
       setAllTasks(res.data || []);
     } catch (err) {
       console.error('Failed to fetch tasks:', err);
+      setAllTasks([]);
     }
+    setTasksLoading(false);
   };
 
   useEffect(() => {
@@ -820,11 +824,14 @@ export default function Dashboard() {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-green-700">Batches</h2>
               <button
-                onClick={() => {
+                onClick={async () => {
+                  setTasksLoading(true);
+                  await fetchAllTasks();
+                  await fetchMentors();
                   setShowEnhancedBatchModal(true);
                   setIsEditMode(false);
                   setEditBatch(null);
-                  fetchMentors();
+                  setTasksLoading(false);
                 }}
                 className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-full shadow hover:scale-105 transition-all font-semibold"
               >
@@ -857,11 +864,14 @@ export default function Dashboard() {
                     <div className="flex gap-2 mt-4">
                       <button
                         className="flex items-center gap-1 px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600 text-xs font-semibold"
-                        onClick={() => {
+                        onClick={async () => {
+                          setTasksLoading(true);
+                          await fetchAllTasks();
+                          await fetchMentors();
                           setEditBatch(batch);
                           setIsEditMode(true);
                           setShowEnhancedBatchModal(true);
-                          fetchMentors();
+                          setTasksLoading(false);
                         }}
                       >
                         <FaEdit /> Edit
@@ -1163,10 +1173,13 @@ export default function Dashboard() {
           onSubmit={handleEnhancedBatchSubmit}
           mentors={mentors}
           tasks={allTasks}
+          tasksLoading={tasksLoading}
           loading={batchLoading}
           error={batchError}
           isEditMode={isEditMode}
           initialBatchData={editBatch}
+          onLessonAdded={fetchAllTasks}
+          categories={categories}
         />
       )}
 

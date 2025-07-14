@@ -153,7 +153,8 @@ export const assignMentor = async (req, res) => {
 // Enroll user in batch
 export const enrollUser = async (req, res) => {
   try {
-    const { batchId, userId } = req.body;
+    const { userId } = req.body;
+    const batchId = req.params.id;
     // Validate user
     const user = await User.findById(userId);
     if (!user || user.designation !== 'user') {

@@ -42,7 +42,7 @@ export default function SuperAdminDashboard() {
     setLoading(true);
     setError("");
     try {
-      const res = await axios.get("http://localhost:3001/api/users/all", { withCredentials: true });
+      const res = await axios.get("http://localhost:3001/api/user/all", { withCredentials: true });
       setAdmins(res.data.admins);
       setMentors(res.data.mentors || []);
       setUsers(res.data.users);
@@ -135,7 +135,7 @@ export default function SuperAdminDashboard() {
 
   const fetchAllMentorsAndAdmins = async () => {
     try {
-      const res = await axios.get("http://localhost:3001/api/users/all", { withCredentials: true });
+      const res = await axios.get("http://localhost:3001/api/user/all", { withCredentials: true });
       setAllMentors(res.data.mentors || []);
       setAllAdmins(res.data.admins || []);
     } catch {}
