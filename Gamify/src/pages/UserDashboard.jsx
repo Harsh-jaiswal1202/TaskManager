@@ -1,5 +1,5 @@
 import { usePoints } from "../contexts/PointsContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { FaSignOutAlt, FaChevronDown, FaUserCircle, FaPlus, FaTrash, FaCamera } from "react-icons/fa";
@@ -10,6 +10,7 @@ import PortalDropdown from "../components/PortalDropdown";
 export default function Dashboard() {
   const { points } = usePoints();
   const navigate = useNavigate();
+  const location = useLocation();
   const [categories, setCategories] = useState([]);
   const [view, setView] = useState('categories'); // 'categories' or 'batches'
   const [myBatches, setMyBatches] = useState([]);
@@ -111,6 +112,19 @@ export default function Dashboard() {
       .catch(() => setAdminInfo(null));
   }, []);
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const viewParam = params.get('view');
+    const tabParam = params.get('tab');
+    if (viewParam && ['categories', 'batches'].includes(viewParam)) {
+      setView(viewParam);
+    }
+    if (tabParam && ['available', 'my'].includes(tabParam)) {
+      setBatchTab(tabParam);
+    }
+    // eslint-disable-next-line
+  }, [location.search]);
+
   // Replace the effect that loads profile data to depend on activePage === 'profile'
   useEffect(() => {
     if (activePage === 'profile' || activePage === 'dashboard') {
@@ -136,7 +150,7 @@ export default function Dashboard() {
 
   const fetchMyBatches = () => {
     setBatchLoading(true);
-    axios.get(`http://localhost:3001/api/batch/user?userId=${userId}`)
+    axios.get(`http://localhost:3001/api/batches/user?userId=${userId}`)
       .then(res => {
         setMyBatches(res.data);
         setBatchLoading(false);
@@ -145,7 +159,7 @@ export default function Dashboard() {
   };
 
   const fetchAvailableBatches = () => {
-    axios.get(`http://localhost:3001/api/batch/available?userId=${userId}`)
+    axios.get(`http://localhost:3001/api/batches/available?userId=${userId}`)
       .then(res => setAvailableBatches(res.data))
       .catch(() => {});
   };
@@ -153,7 +167,7 @@ export default function Dashboard() {
   const handleEnroll = (batchId) => {
     const userId = Cookies.get('id');
     setEnrolling((prev) => ({ ...prev, [batchId]: true }));
-    axios.post('http://localhost:3001/api/batch/enroll-user', { batchId, userId })
+    axios.post('http://localhost:3001/api/batches/enroll-user', { batchId, userId })
       .then(() => {
         fetchMyBatches();
         fetchAvailableBatches();
@@ -823,6 +837,12 @@ export default function Dashboard() {
                           </p>
                         )}
                       </div>
+                      <button
+                        onClick={() => navigate(`/batch/${batch._id}/analytics`)}
+                        className="mt-3 sm:mt-4 w-full py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all hover:scale-105 bg-gradient-to-r from-purple-500 to-pink-500 text-white"
+                      >
+                        View Progress
+                      </button>
                       {batch.status === 'completed' && !batch.feedbackGiven && (
                         <button
                           onClick={() => setFeedbackModal({ open: true, batch })}

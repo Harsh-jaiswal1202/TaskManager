@@ -4,6 +4,7 @@ import { FaSignOutAlt, FaEdit, FaTrash } from "react-icons/fa";
 import Cookies from "js-cookie";
 import axios from "axios";
 import { restrictAdmin, restrictUser, restrictMentor } from '../services/api';
+import EnhancedBatchModal from '../components/EnhancedBatchModal';
 
 export default function SuperAdminDashboard() {
   const navigate = useNavigate();
@@ -17,6 +18,13 @@ export default function SuperAdminDashboard() {
   const [view, setView] = useState("admins"); // 'admins', 'mentors', 'users', 'batches'
   const [editModal, setEditModal] = useState({ isOpen: false, batch: null, admin: '', mentor: '' });
   const [deleteLoading, setDeleteLoading] = useState({});
+  const [showEnhancedBatchModal, setShowEnhancedBatchModal] = useState(false);
+  const [editBatch, setEditBatch] = useState(null);
+  const [allMentors, setAllMentors] = useState([]);
+  const [allAdmins, setAllAdmins] = useState([]);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [batchLoading, setBatchLoading] = useState(false);
+  const [batchError, setBatchError] = useState("");
 
   useEffect(() => {
     const id = Cookies.get("id");
@@ -34,7 +42,7 @@ export default function SuperAdminDashboard() {
     setLoading(true);
     setError("");
     try {
-      const res = await axios.get("http://localhost:3001/api/user/all", { withCredentials: true });
+      const res = await axios.get("http://localhost:3001/api/users/all", { withCredentials: true });
       setAdmins(res.data.admins);
       setMentors(res.data.mentors || []);
       setUsers(res.data.users);
@@ -46,7 +54,7 @@ export default function SuperAdminDashboard() {
 
   const fetchBatches = async () => {
     try {
-      const res = await axios.get("http://localhost:3001/api/batch/all", { withCredentials: true });
+      const res = await axios.get("http://localhost:3001/api/batches/", { withCredentials: true });
       setBatches(res.data);
     } catch (err) {
       // Optionally handle error
@@ -93,14 +101,17 @@ export default function SuperAdminDashboard() {
   };
 
   const handleEditBatch = (batch) => {
-    setEditModal({ isOpen: true, batch, admin: batch.admin?._id || '', mentor: batch.mentor?._id || '' });
+    setEditBatch(batch);
+    setIsEditMode(true);
+    setShowEnhancedBatchModal(true);
+    fetchAllMentorsAndAdmins();
   };
 
   const handleEditModalSave = async () => {
     if (!editModal.admin || !editModal.mentor) return;
     try {
       const token = Cookies.get('authToken');
-      await axios.patch(`http://localhost:3001/api/batch/edit/${editModal.batch._id}`, {
+      await axios.put(`http://localhost:3001/api/batches/${editModal.batch._id}`, {
         admin: editModal.admin,
         mentor: editModal.mentor,
       }, { headers: { Authorization: `Bearer ${token}` } });
@@ -114,12 +125,40 @@ export default function SuperAdminDashboard() {
   const handleDeleteBatch = async (batchId) => {
     setDeleteLoading((prev) => ({ ...prev, [batchId]: true }));
     try {
-      await axios.delete(`http://localhost:3001/api/batch/delete/${batchId}`);
+      await axios.delete(`http://localhost:3001/api/batches/${batchId}`);
       fetchBatches();
     } catch (err) {
       alert('Failed to delete batch.');
     }
     setDeleteLoading((prev) => ({ ...prev, [batchId]: false }));
+  };
+
+  const fetchAllMentorsAndAdmins = async () => {
+    try {
+      const res = await axios.get("http://localhost:3001/api/users/all", { withCredentials: true });
+      setAllMentors(res.data.mentors || []);
+      setAllAdmins(res.data.admins || []);
+    } catch {}
+  };
+
+  const handleEnhancedBatchSubmit = async (data) => {
+    setBatchLoading(true);
+    setBatchError("");
+    try {
+      const token = Cookies.get('authToken');
+      if (isEditMode) {
+        await axios.put(`http://localhost:3001/api/batches/${editBatch._id}`, data, { headers: { Authorization: `Bearer ${token}` } });
+      } else {
+        await axios.post("http://localhost:3001/api/batches/", data, { headers: { Authorization: `Bearer ${token}` } });
+      }
+      setShowEnhancedBatchModal(false);
+      setEditBatch(null);
+      setIsEditMode(false);
+      fetchBatches();
+    } catch (err) {
+      setBatchError("Failed to save batch.");
+    }
+    setBatchLoading(false);
   };
 
   return (
@@ -376,6 +415,19 @@ export default function SuperAdminDashboard() {
                     </div>
                   </div>
                 )}
+                <EnhancedBatchModal
+                  isOpen={showEnhancedBatchModal}
+                  onClose={() => { setShowEnhancedBatchModal(false); setEditBatch(null); setIsEditMode(false); }}
+                  onSubmit={handleEnhancedBatchSubmit}
+                  mentors={allMentors}
+                  admins={allAdmins}
+                  tasks={[]}
+                  loading={batchLoading}
+                  error={batchError}
+                  isEditMode={isEditMode}
+                  initialBatchData={editBatch}
+                  isSuperAdmin={true}
+                />
               </div>
             )}
           </div>

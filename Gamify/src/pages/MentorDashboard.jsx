@@ -20,7 +20,7 @@ export default function MentorDashboard() {
     }
     setLoading(true);
     axios
-      .get(`http://localhost:3001/api/batch/all?mentor=${id}`)
+      .get(`http://localhost:3001/api/batches?mentor=${id}`)
       .then((res) => {
         setBatches(res.data);
         setLoading(false);

@@ -1,19 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import BatchAnalytics from '../components/BatchAnalytics';
-import BatchChat from '../components/BatchChat';
 import axios from 'axios';
+import Cookies from 'js-cookie';
 
-export default function BatchAnalyticsPage() {
+export default function StudentBatchAnalyticsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [batch, setBatch] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const userId = Cookies.get('id');
 
   useEffect(() => {
     setLoading(true);
-    axios.get(`http://localhost:3001/api/batches/${id}`)
+    axios.get(`http://localhost:3001/api/batch/${id}`)
       .then(res => {
         setBatch(res.data);
         setLoading(false);
@@ -24,6 +25,9 @@ export default function BatchAnalyticsPage() {
       });
   }, [id]);
 
+  // Optionally, filter or compute student-specific progress here
+  // For now, just pass the batch data and userId
+
   if (loading) return <div className="min-h-screen flex items-center justify-center text-xl">Loading...</div>;
   if (error) return <div className="min-h-screen flex items-center justify-center text-red-600">{error}</div>;
   if (!batch) return null;
@@ -31,16 +35,13 @@ export default function BatchAnalyticsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-4 md:p-8">
       <button
-        onClick={() => navigate('/admin/dashboard?tab=batches')}
+        onClick={() => navigate('/dashboard?view=batches&tab=my')}
         className="mb-6 px-4 py-2 rounded-lg bg-purple-100 text-purple-700 font-semibold hover:bg-purple-200 transition-all"
       >
         ← Back
       </button>
-      <h1 className="text-3xl font-bold mb-6 text-purple-700">Batch Analytics: {batch.name}</h1>
-      <BatchAnalytics batchData={batch} studentProgress={[]} />
-      <div className="mt-10">
-        <BatchChat batchId={batch._id} />
-      </div>
+      <h1 className="text-3xl font-bold mb-6 text-purple-700">My Progress: {batch.name}</h1>
+      <BatchAnalytics batchData={batch} studentProgress={[]} userId={userId} />
     </div>
   );
 } 

@@ -7,16 +7,19 @@ export default function EnhancedBatchModal({
   onClose, 
   onSubmit, 
   mentors, 
+  admins = [],
   tasks, 
   loading, 
   error, 
   isEditMode = false, 
-  initialBatchData = null 
+  initialBatchData = null, 
+  isSuperAdmin = false
 }) {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     mentor: '',
+    admin: '',
     industryFocus: '',
     difficultyLevel: 'Beginner',
     estimatedDuration: 4,
@@ -30,6 +33,7 @@ export default function EnhancedBatchModal({
         name: initialBatchData.name || '',
         description: initialBatchData.description || '',
         mentor: initialBatchData.mentor?._id || initialBatchData.mentor || '',
+        admin: initialBatchData.admin?._id || initialBatchData.admin || '',
         industryFocus: initialBatchData.industryFocus || '',
         difficultyLevel: initialBatchData.difficultyLevel || 'Beginner',
         estimatedDuration: initialBatchData.estimatedDuration || 4,
@@ -41,6 +45,7 @@ export default function EnhancedBatchModal({
         name: '',
         description: '',
         mentor: '',
+        admin: '',
         industryFocus: '',
         difficultyLevel: 'Beginner',
         estimatedDuration: 4,
@@ -315,6 +320,25 @@ export default function EnhancedBatchModal({
               ))}
             </div>
           </div>
+
+          {isSuperAdmin && (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Assign Admin *
+              </label>
+              <select
+                value={formData.admin}
+                onChange={e => setFormData(prev => ({ ...prev, admin: e.target.value }))}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                required
+              >
+                <option value="">Select Admin</option>
+                {admins.map(admin => (
+                  <option key={admin._id} value={admin._id}>{admin.username} ({admin.email})</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Error Message */}
           {error && (

@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-export default function connect(url) {
+function connect(url) {
   return new Promise((resolve, reject) => {
     mongoose.connect(url);
 
@@ -17,3 +17,5 @@ export default function connect(url) {
     });
   });
 }
+
+export default connect;

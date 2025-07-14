@@ -1,11 +1,12 @@
 import express from "express";
 import cors from "cors";
-import connect from "./connection.js"; // Make sure you include `.js` extension
+import connect from "./connection.js";
 import CategoryRoutes from "./routes/CategoryRoutes.js";
 import TaskRoutes from "./routes/TaskRoutes.js";
 import UserRoutes from "./routes/UserRoutes.js";
 import BatchRoutes from "./routes/BatchRoutes.js";
 import FeedbackRoutes from "./routes/FeedbackRoutes.js";
+
 const app = express();
 
 // Middleware
@@ -15,7 +16,7 @@ app.use(cors({
     "http://localhost:5176",
     "http://127.0.0.1:5173",
     "http://192.168.1.100:5173",
-    "http://localhost:5173" // <-- replace with your actual local IP
+    "http://localhost:5173"
   ],
   credentials: true
 }));
@@ -35,9 +36,9 @@ connect("mongodb://localhost:27017/Tasks")
 
 // Routes
 app.use("/api/categories", CategoryRoutes);
-app.use("/api/task", TaskRoutes);
-app.use("/api/user", UserRoutes);
-app.use("/api/batch", BatchRoutes);
+app.use("/api/tasks", TaskRoutes);
+app.use("/api/users", UserRoutes);
+app.use("/api/batches", BatchRoutes);
 app.use("/api/feedback", FeedbackRoutes);
 // Optional test route
 app.get("/", (req, res) => {

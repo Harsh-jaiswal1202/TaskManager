@@ -20,7 +20,7 @@ export default function LoginPage() {
       return;
     }
     try {
-      const response = await axios.post('http://localhost:3001/api/user/login', {
+      const response = await axios.post('http://localhost:3001/api/users/login', {
         email: form.email,
         password: form.password,
         designation: form.designation,

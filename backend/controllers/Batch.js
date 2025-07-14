@@ -4,37 +4,48 @@ import User from '../models/User.js';
 // Create a new batch
 export const createBatch = async (req, res) => {
   try {
-    const { 
-      name, 
-      description, 
-      admin, 
-      mentor, 
-      industryFocus, 
-      difficultyLevel, 
-      estimatedDuration, 
-      learningObjectives, 
-      tasks 
+    const {
+      name,
+      description,
+      admin,
+      mentor,
+      industryFocus,
+      difficultyLevel,
+      estimatedDuration,
+      learningObjectives,
+      tasks
     } = req.body;
-    console.log('Received batch creation request:', { 
-      name, 
-      description, 
-      admin, 
-      mentor, 
-      industryFocus, 
-      difficultyLevel, 
-      estimatedDuration, 
-      learningObjectives, 
-      tasks 
+    console.log('Received batch creation request:', {
+      name,
+      description,
+      admin,
+      mentor,
+      industryFocus,
+      difficultyLevel,
+      estimatedDuration,
+      learningObjectives,
+      tasks
     });
-    
+
+    // Only superadmin or admin can create batch
+    if (!req.user || (req.user.designation !== 'superadmin' && req.user.designation !== 'admin')) {
+      return res.status(403).json({ message: 'Only admin or superadmin can create batches' });
+    }
+
+    // If admin is not provided and user is admin, set admin to req.user.id
+    let adminId = admin;
+    if (req.user.designation === 'admin') {
+      adminId = req.user.id;
+    }
+
     // Validate admin
-    const adminUser = await User.findById(admin);
+    const adminUser = await User.findById(adminId);
     console.log('Admin user found:', adminUser);
     if (!adminUser || (adminUser.designation !== 'admin' && adminUser.designation !== 'superadmin')) {
       console.log('Admin validation failed:', { adminUser: adminUser?.designation });
       return res.status(400).json({ message: 'Assigned admin must have admin or superadmin designation' });
     }
-    
+
     // Validate mentor
     const mentorUser = await User.findById(mentor);
     console.log('Mentor user found:', mentorUser);
@@ -42,17 +53,17 @@ export const createBatch = async (req, res) => {
       console.log('Mentor validation failed:', { mentorUser: mentorUser?.designation });
       return res.status(400).json({ message: 'Assigned mentor must have mentor designation' });
     }
-    
-    const batch = await Batch.create({ 
-      name, 
-      description, 
-      admin, 
-      mentor, 
-      industryFocus, 
-      difficultyLevel, 
-      estimatedDuration, 
-      learningObjectives, 
-      tasks 
+
+    const batch = await Batch.create({
+      name,
+      description,
+      admin: adminId,
+      mentor,
+      industryFocus,
+      difficultyLevel,
+      estimatedDuration,
+      learningObjectives,
+      tasks
     });
     console.log('Batch created successfully:', batch);
     res.status(201).json(batch);
@@ -178,19 +189,36 @@ export const deleteBatch = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: 'Failed to delete batch', error: error.message });
   }
-}; 
+};
 
 // Edit batch (superadmin only)
 export const editBatch = async (req, res) => {
   try {
-    // Only superadmin can edit batch
-    if (!req.user || req.user.designation !== 'superadmin') {
-      return res.status(403).json({ message: 'Only superadmin can edit batches' });
-    }
     const { id } = req.params;
-    const { name, admin, mentor } = req.body;
+    const { name, admin, mentor, description, industryFocus, difficultyLevel, estimatedDuration, learningObjectives, tasks } = req.body;
+    const batch = await Batch.findById(id);
+    if (!batch) return res.status(404).json({ message: 'Batch not found' });
+    // Debug logging
+    console.log('User making request:', req.user);
+    console.log('Batch admin:', batch.admin.toString());
+    // Only superadmin or the assigned admin can edit batch
+    if (
+      !req.user ||
+      (
+        req.user.designation !== 'superadmin' &&
+        !(req.user.designation === 'admin' && batch.admin.toString() === req.user.id)
+      )
+    ) {
+      return res.status(403).json({ message: 'Only the assigned admin or superadmin can edit this batch' });
+    }
     const update = {};
     if (name) update.name = name;
+    if (description) update.description = description;
+    if (industryFocus) update.industryFocus = industryFocus;
+    if (difficultyLevel) update.difficultyLevel = difficultyLevel;
+    if (estimatedDuration) update.estimatedDuration = estimatedDuration;
+    if (learningObjectives) update.learningObjectives = learningObjectives;
+    if (tasks) update.tasks = tasks;
     if (admin) {
       const adminUser = await User.findById(admin);
       if (!adminUser || (adminUser.designation !== 'admin' && adminUser.designation !== 'superadmin')) {
@@ -205,13 +233,12 @@ export const editBatch = async (req, res) => {
       }
       update.mentor = mentor;
     }
-    const batch = await Batch.findByIdAndUpdate(id, update, { new: true });
-    if (!batch) return res.status(404).json({ message: 'Batch not found' });
-    res.status(200).json(batch);
+    const updatedBatch = await Batch.findByIdAndUpdate(id, update, { new: true });
+    res.status(200).json(updatedBatch);
   } catch (error) {
     res.status(500).json({ message: 'Failed to edit batch', error: error.message });
   }
-}; 
+};
 
 // Get a single batch by ID
 export const getBatchById = async (req, res) => {

@@ -70,10 +70,10 @@ export default function Dashboard() {
   const fetchCurrentAdmin = async () => {
     try {
       // First, try to get the current user directly by ID
-      const userRes = await axios.get(`http://localhost:3001/api/user/${parentId}`, { withCredentials: true });
+      const userRes = await axios.get(`http://localhost:3001/api/users/${parentId}`, { withCredentials: true });
       console.log('Current user from direct API call:', userRes.data);
       
-      const res = await axios.get("http://localhost:3001/api/user/all", { withCredentials: true });
+      const res = await axios.get("http://localhost:3001/api/users/all", { withCredentials: true });
       const superadmins = res.data.superadmins || [];
       const admins = res.data.admins || [];
       // Find the current admin by matching the parentId in both superadmins and admins
@@ -212,7 +212,7 @@ export default function Dashboard() {
 
   const fetchMentors = async () => {
     try {
-      const res = await axios.get("http://localhost:3001/api/user/all", { withCredentials: true });
+      const res = await axios.get("http://localhost:3001/api/users/all", { withCredentials: true });
       setMentors(res.data.mentors || []);
     } catch (err) {
       // Optionally handle error
@@ -220,7 +220,7 @@ export default function Dashboard() {
   };
   const fetchBatches = async () => {
     try {
-      const res = await axios.get(`http://localhost:3001/api/batch/all?admin=${parentId}`, { withCredentials: true });
+      const res = await axios.get(`http://localhost:3001/api/batches/`, { withCredentials: true });
       setBatches(res.data);
     } catch (err) {
       // Optionally handle error
@@ -229,7 +229,7 @@ export default function Dashboard() {
   const [users, setUsers] = useState([]);
   const fetchUsers = async () => {
     try {
-      const res = await axios.get("http://localhost:3001/api/user/all", { withCredentials: true });
+      const res = await axios.get("http://localhost:3001/api/users/all", { withCredentials: true });
       setUsers(res.data.users || []);
     } catch (err) {
       // Optionally handle error
@@ -302,7 +302,7 @@ export default function Dashboard() {
     console.log('Current admin from DB:', currentAdmin);
     
     try {
-      const response = await axios.post("http://localhost:3001/api/batch/create", {
+      const response = await axios.post("http://localhost:3001/api/batches/", {
         name: batchName,
         description: batchDescription.trim(),
         admin: adminId,
@@ -346,7 +346,7 @@ export default function Dashboard() {
     setEditLoading(true);
     try {
       const token = Cookies.get('authToken');
-      await axios.patch(`http://localhost:3001/api/batch/edit/${editBatchModal.batch._id}`, {
+      await axios.put(`http://localhost:3001/api/batches/${editBatchModal.batch._id}`, {
         name: editBatchModal.name,
         mentor: editBatchModal.mentor,
       }, { headers: { Authorization: `Bearer ${token}` } });
@@ -368,7 +368,7 @@ export default function Dashboard() {
       const token = Cookies.get('authToken');
       if (data.isEditMode && data.batchId) {
         // Update batch
-        await axios.patch(`http://localhost:3001/api/batch/edit/${data.batchId}`, {
+        const updatePayload = {
           name: data.name,
           description: data.description,
           mentor: data.mentor,
@@ -377,24 +377,27 @@ export default function Dashboard() {
           estimatedDuration: data.estimatedDuration,
           learningObjectives: data.learningObjectives,
           tasks: data.selectedTasks
-        }, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        };
+        if (designation === 'superadmin' && data.admin) {
+          updatePayload.admin = data.admin;
+        }
+        await axios.put(`http://localhost:3001/api/batches/${data.batchId}`,
+          updatePayload,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
       } else {
         // Create batch
-        await axios.post('http://localhost:3001/api/batch/create', {
+        const createPayload = {
           name: data.name,
           description: data.description,
-          admin: parentId,
           mentor: data.mentor,
-          industryFocus: data.industryFocus,
-          difficultyLevel: data.difficultyLevel,
-          estimatedDuration: data.estimatedDuration,
-          learningObjectives: data.learningObjectives,
-          tasks: data.selectedTasks
-        }, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        };
+        if (designation === 'superadmin' && data.admin) {
+          createPayload.admin = data.admin;
+        } else if (designation === 'admin') {
+          createPayload.admin = parentId;
+        }
+        await axios.post('http://localhost:3001/api/batches/', createPayload, { headers: { Authorization: `Bearer ${token}` } });
       }
       setShowEnhancedBatchModal(false);
       setEditBatch(null);
