@@ -16,4 +16,6 @@ router.delete('/delete/:id',deleteCategory)
 //PATCH Routes
 router.patch('/edit/:id',editCategory)
 
+// NOTE: All category endpoints now support batch-specific operations via batchId in query or body.
+
 export default router;

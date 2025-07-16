@@ -31,7 +31,7 @@ export default function BatchAnalyticsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-4 md:p-8">
       <button
-        onClick={() => navigate('/admin/dashboard?tab=batches')}
+        onClick={() => navigate('/admin/dashboard?view=batches')}
         className="mb-6 px-4 py-2 rounded-lg bg-purple-100 text-purple-700 font-semibold hover:bg-purple-200 transition-all"
       >
         ← Back

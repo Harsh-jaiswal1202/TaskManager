@@ -11,8 +11,7 @@ export default function Dashboard() {
   const { points } = usePoints();
   const navigate = useNavigate();
   const location = useLocation();
-  const [categories, setCategories] = useState([]);
-  const [view, setView] = useState('categories'); // 'categories' or 'batches'
+  const [view, setView] = useState('batches'); // 'categories' or 'batches'
   const [myBatches, setMyBatches] = useState([]);
   const [batchLoading, setBatchLoading] = useState(false);
   const [availableBatches, setAvailableBatches] = useState([]);
@@ -92,16 +91,16 @@ export default function Dashboard() {
     }
 
     // ✅ Fetch categories from backend
-    axios
-      .get("http://localhost:3001/api/categories/all")
-      .then((res) => {
-        console.log("Categories fetched successfully:", res.data);
+    // axios
+    //   .get("http://localhost:3001/api/categories/all")
+    //   .then((res) => {
+    //     console.log("Categories fetched successfully:", res.data);
         
-        setCategories(res.data);
-      })
-      .catch((err) => {
-        console.error("Error fetching tasks:", err);
-      });
+    //     setCategories(res.data);
+    //   })
+    //   .catch((err) => {
+    //     console.error("Error fetching tasks:", err);
+    //   });
     // Fetch user batches
     fetchMyBatches();
     fetchAvailableBatches();
@@ -567,12 +566,7 @@ export default function Dashboard() {
               </div>
 
               <div className="flex flex-col sm:flex-row items-center gap-3">
-                <button
-                  onClick={() => setView('categories')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full shadow-lg transition-all text-sm sm:text-base font-semibold ${view === 'categories' ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white' : 'bg-gray-200 text-purple-700 hover:bg-purple-100'}`}
-                >
-                  Categories
-                </button>
+                {/* Remove the Categories view/button from the navigation */}
                 <div className="relative">
                   <button
                     ref={batchesBtnRef}
@@ -670,18 +664,6 @@ export default function Dashboard() {
                         </button>
                         <button
                           className="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 text-purple-700 font-semibold"
-                          onClick={() => { setShowProfileMenuModal(false); setShowProgressModal(true); }}
-                        >
-                          My Progress
-                        </button>
-                        <button
-                          className="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 text-purple-700 font-semibold"
-                          onClick={() => { setShowProfileMenuModal(false); setShowAchievementsModal(true); }}
-                        >
-                          Achievements
-                        </button>
-                        <button
-                          className="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 text-purple-700 font-semibold"
                           onClick={() => { setShowProfileMenuModal(false); navigate('/settings'); }}
                         >
                           Settings
@@ -701,80 +683,8 @@ export default function Dashboard() {
           </nav>
 
           {/* User Info Card (show Admin ID) */}
-          {adminInfo && (
-            <div className="mb-6 max-w-xl mx-auto bg-white/80 rounded-xl shadow p-4 flex flex-col items-start">
-              <div className="text-sm text-gray-700 font-semibold mb-1">Admin ID:</div>
-              <div className="font-mono text-base text-purple-700 break-all">{adminInfo.adminId || adminInfo._id}</div>
-            </div>
-          )}
 
-          {view === 'categories' && (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 z-0">
-                {categories.map((category, id) => (
-                  <motion.div
-                    key={id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: id * 0.05 }}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => {
-                      document
-                        .getElementById(`card-${category._id}`)
-                        ?.classList.add("animate-pulse");
-                      setTimeout(() => {
-                        Cookies.get("id") === "admin"
-                          ? navigate(`/admin/task/${category._id}`)
-                          : navigate(`/task/${category._id}`);
-                      }, 300);
-                    }}
-                    className="cursor-pointer"
-                  >
-                    <div
-                      id={`card-${category._id}`}
-                      className="h-full bg-[var(--card-bg)] backdrop-blur-sm shadow-md rounded-2xl p-6 hover:shadow-xl transition-all border-t-8 flex flex-col"
-                      style={{ borderColor: category.color || "#ccc" }}
-                    >
-                      <div className="flex-1">
-                        <div
-                          className="text-4xl mb-3 text-center"
-                          style={{ color: category.color || "#333" }}
-                        >
-                          {category.emoji}
-                        </div>
-                        <h3 className="text-xl font-bold text-center text-[var(--text-color)] mb-2">
-                          {category.name}
-                        </h3>
-                        <div className="w-full bg-gray-200 rounded-full h-2 mt-4">
-                          <div
-                            className="h-2 rounded-full transition-all duration-500"
-                            style={{
-                              width: `${Math.min(100, Math.random() * 30 + 20)}%`,
-                              backgroundColor: category.color || "#999",
-                            }}
-                          ></div>
-                        </div>
-                        <p className="text-xs text-gray-500 text-center mt-2">
-                          {category.tasks.length} quests available
-                        </p>
-                      </div>
 
-                      <button
-                        className="mt-4 w-full py-2 rounded-lg text-sm font-semibold transition-all hover:scale-105 cursor-pointer"
-                        style={{
-                          backgroundColor: `${category.color || "#ccc"}20`,
-                          color: category.color || "#333",
-                        }}
-                      >
-                        View Tasks →
-                      </button>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </>
-          )}
           {view === 'batches' && batchTab === 'available' && (
             <div className="w-full">
               <h2 className="text-xl font-bold mb-4 text-purple-700">Available Batches</h2>

@@ -1,5 +1,6 @@
 import Batch from '../models/Batch.js';
 import User from '../models/User.js';
+import mongoose from 'mongoose';
 
 // Create a new batch
 export const createBatch = async (req, res) => {
@@ -75,12 +76,33 @@ export const createBatch = async (req, res) => {
 
 // Get all batches (optionally filter by admin or mentor)
 export const getBatches = async (req, res) => {
+  console.log('getBatches endpoint hit', req.user && req.user.designation, req.user && req.user.id);
   try {
-    const { admin, mentor } = req.query;
-    const filter = {};
-    if (admin) filter.admin = admin;
-    if (mentor) filter.mentor = mentor;
-    let batches = await Batch.find(filter).populate('admin mentor users');
+    let filter = {};
+    if (req.user.designation === 'admin') {
+      filter.admin = req.user.id;
+    } else if (req.user.designation === 'mentor') {
+      filter.mentor = req.user.id;
+    } else if (req.user.designation === 'user') {
+      // Only show batches created by the user's admin AND where the user is enrolled
+      filter = {
+        admin: new mongoose.Types.ObjectId(req.user.parentId),
+        users: req.user.id
+      };
+    }
+    // Debug log
+    console.log(`getBatches called by ${req.user.designation}, filter:`, filter);
+    // Only superadmin can see all batches
+    let batches;
+    if (req.user.designation === 'superadmin') {
+      batches = await Batch.find({}).populate('admin mentor users');
+    } else {
+      batches = await Batch.find(filter).populate('admin mentor users');
+    }
+    // Additional debug log for user
+    if (req.user.designation === 'user') {
+      console.log(`User ${req.user.id} (parentId: ${req.user.parentId}) - batches found: ${batches.length}`);
+    }
     // Filter populated fields by designation
     batches = batches.map(batch => {
       const filteredBatch = batch.toObject();
@@ -100,7 +122,16 @@ export const getBatchesForUser = async (req, res) => {
   try {
     const { userId } = req.query;
     if (!userId) return res.status(400).json({ message: 'userId is required' });
-    let batches = await Batch.find({ users: userId }).populate('admin mentor users');
+
+    // Find the user to get their parentId (admin)
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // Only return batches created by the user's admin
+    let batches = await Batch.find({
+      admin: user.parentId
+    }).populate('admin mentor users');
+
     batches = batches.map(batch => {
       const filteredBatch = batch.toObject();
       filteredBatch.admin = (filteredBatch.admin && filteredBatch.admin.designation === 'admin') ? filteredBatch.admin : null;
@@ -119,7 +150,17 @@ export const getAvailableBatchesForUser = async (req, res) => {
   try {
     const { userId } = req.query;
     if (!userId) return res.status(400).json({ message: 'userId is required' });
-    let batches = await Batch.find({ users: { $ne: userId } }).populate('admin mentor users');
+
+    // Find the user to get their parentId (admin)
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // Only return batches not already enrolled AND created by the user's admin
+    let batches = await Batch.find({
+      users: { $ne: userId },
+      admin: user.parentId
+    }).populate('admin mentor users');
+
     batches = batches.map(batch => {
       const filteredBatch = batch.toObject();
       filteredBatch.admin = (filteredBatch.admin && filteredBatch.admin.designation === 'admin') ? filteredBatch.admin : null;

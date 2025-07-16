@@ -70,7 +70,9 @@ const loginUser = async (req, res) => {
       if (!admin) {
         return res.status(400).json({ message: 'Invalid Admin ID.' });
       }
-      if (user.parentId !== adminId) {
+      // Log for debugging
+      console.log(`User login attempt: user.email=${user.email}, user.parentId=${user.parentId}, provided adminId=${adminId}, admin._id=${admin._id}`);
+      if (String(user.parentId) !== String(admin._id)) {
         return res.status(400).json({ message: 'You are not assigned to this Admin ID.' });
       }
     }
@@ -95,7 +97,13 @@ const getAllUsers = async (req, res) => {
     const superadmins = await User.find({ designation: 'superadmin' }, 'username email designation restricted');
     const admins = await User.find({ designation: 'admin' }, 'username email designation restricted adminId');
     const mentors = await User.find({ designation: 'mentor' }, 'username email designation restricted');
-    const users = await User.find({ designation: 'user' }, 'username email designation restricted');
+    let users;
+    if (req.user && req.user.designation === 'admin') {
+      // Only return users assigned to this admin (parentId matches admin's _id)
+      users = await User.find({ designation: 'user', parentId: req.user.id }, 'username email designation restricted parentId adminId');
+    } else {
+      users = await User.find({ designation: 'user' }, 'username email designation restricted parentId adminId');
+    }
     res.status(200).json({ superadmins, admins, mentors, users });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -124,14 +132,31 @@ const toggleAdminRestriction = async (req, res) => {
 
 // Toggle restrict/unrestrict for a user (only by superadmin)
 const toggleUserRestriction = async (req, res) => {
-  if (!req.user || req.user.designation !== 'superadmin') {
-    return res.status(403).json({ message: 'Only superadmin can perform this action' });
+  console.log('toggleUserRestriction called by:', req.user); // Debug log
+  if (!req.user || (req.user.designation !== 'superadmin' && req.user.designation !== 'admin')) {
+    console.log('403 triggered: req.user =', req.user);
+    return res.status(403).json({ message: 'Only admin or superadmin can perform this action' });
   }
+  console.log('Passed admin/superadmin check:', req.user.designation);
   const { id } = req.params;
   try {
-    const user = await User.findOne({ _id: id, designation: 'user' });
-    if (!user) {
+    const user = await User.findOne({_id: id, designation: 'user' });
+    let admin = null;
+    if (req.user.designation === 'admin') {
+      admin = await User.findOne({_id: req.user.id, designation: 'admin'});
+      if(!admin){
+        return res.status(403).json({ message: 'Only admin or superadmin can perform this action' });
+      }
+    }
+    if (!user ) {
       return res.status(404).json({ message: 'User not found' });
+    }
+    // If admin, only allow restricting their own users
+    if (
+      req.user.designation === 'admin' &&
+      String(user.parentId) !== String(admin.adminId)
+    ) {
+      return res.status(403).json({ message: 'Admins can only restrict their own users' });
     }
     user.restricted = !user.restricted;
     await user.save();
@@ -143,7 +168,7 @@ const toggleUserRestriction = async (req, res) => {
 
 // Toggle restrict/unrestrict for a mentor (only by superadmin)
 const toggleMentorRestriction = async (req, res) => {
-  if (!req.user || req.user.designation !== 'superadmin') {
+  if (!req.user || req.user.designation === 'user') {
     return res.status(403).json({ message: 'Only superadmin can perform this action' });
   }
   const { id } = req.params;

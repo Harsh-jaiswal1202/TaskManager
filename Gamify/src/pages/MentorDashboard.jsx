@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import Cookies from "js-cookie";
 import axios from "axios";
 import { FaSignOutAlt } from "react-icons/fa";
+import BatchAnalytics from "../components/BatchAnalytics";
 
 export default function MentorDashboard() {
   const [batches, setBatches] = useState([]);
@@ -10,6 +11,8 @@ export default function MentorDashboard() {
   const [feedback, setFeedback] = useState([]);
   const mentorId = Cookies.get("id");
   const [loading, setLoading] = useState(true);
+  const [showAnalytics, setShowAnalytics] = useState(false);
+  const [selectedBatchForAnalytics, setSelectedBatchForAnalytics] = useState(null);
 
   useEffect(() => {
     const id = Cookies.get("id");
@@ -19,8 +22,11 @@ export default function MentorDashboard() {
       return;
     }
     setLoading(true);
+    const token = Cookies.get('authToken');
     axios
-      .get(`http://localhost:3001/api/batches?mentor=${id}`)
+      .get(`http://localhost:3001/api/batches/`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
       .then((res) => {
         setBatches(res.data);
         setLoading(false);
@@ -121,6 +127,18 @@ export default function MentorDashboard() {
                             Users: {batch.users?.length || 0}
                           </p>
                         </div>
+                        <button
+                          className="mt-3 sm:mt-4 w-full py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all hover:scale-105 bg-gradient-to-r from-purple-500 to-pink-500 text-white"
+                          onClick={() => window.location.href = `/batch/${batch._id}/course`}
+                        >
+                          📚 View Course
+                        </button>
+                        <button
+                          className="mt-3 sm:mt-4 w-full py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all hover:scale-105 bg-gradient-to-r from-purple-500 to-pink-500 text-white"
+                          onClick={() => { setSelectedBatchForAnalytics(batch); setShowAnalytics(true); }}
+                        >
+                          View Analytics
+                        </button>
                       </div>
                     ))
                   )}
@@ -146,6 +164,37 @@ export default function MentorDashboard() {
           </div>
         )}
       </div>
+      {/* Analytics Modal */}
+      {showAnalytics && selectedBatchForAnalytics && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-white">
+          <div className="sticky top-0 bg-gradient-to-r from-purple-600 to-pink-600 text-white p-6 flex items-center justify-between">
+            <button
+              onClick={() => setShowAnalytics(false)}
+              className="mr-4 px-4 py-2 rounded-lg bg-white text-purple-700 font-semibold hover:bg-purple-100 transition-all"
+              style={{ minWidth: '90px' }}
+            >
+              ← Back
+            </button>
+            <div className="flex-1 flex flex-col items-center">
+              <h2 className="text-2xl font-bold">Batch Analytics</h2>
+              <p className="text-purple-100 mt-1">{selectedBatchForAnalytics.name}</p>
+            </div>
+            <button
+              onClick={() => setShowAnalytics(false)}
+              className="text-white hover:text-purple-200 text-2xl font-bold ml-auto"
+              title="Close"
+            >
+              ×
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6">
+            <BatchAnalytics 
+              batchData={selectedBatchForAnalytics}
+              studentProgress={[]}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 } 

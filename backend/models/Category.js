@@ -6,6 +6,7 @@ const categorySchema = new mongoose.Schema({
   emoji: { type: String, required: true },
   color: { type: String }, // hex color
   tasks: [{ type: mongoose.Schema.Types.ObjectId, ref: "Task" }], // reference to Task documents
+  batch: { type: mongoose.Schema.Types.ObjectId, ref: "Batch", required: true }, // reference to Batch
 });
 
 export default mongoose.model("Category", categorySchema);

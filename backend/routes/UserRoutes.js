@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.post('/register', registerUser);
 router.post('/login', loginUser);
-router.get('/all',  getAllUsers);
+router.get('/all', authenticateJWT, getAllUsers);
 router.get('/:id', getUserById);
 router.patch('/restrict/:id', authenticateJWT, toggleAdminRestriction);
 router.patch('/restrict-user/:id', authenticateJWT, toggleUserRestriction);

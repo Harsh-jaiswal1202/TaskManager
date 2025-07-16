@@ -7,9 +7,17 @@ const api = axios.create({
   withCredentials: true
 });
 
-// Request interceptor for logging
+// Add Authorization header with JWT token if present
 api.interceptors.request.use(
   (config) => {
+    // Add token from localStorage or sessionStorage
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    console.log('JWT token used for API request:', token);
+    if (token) {
+      config.headers = config.headers || {};
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    console.log('API Request Headers:', config.headers);
     console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`);
     return config;
   },
@@ -68,7 +76,7 @@ export const restrictMentor = (id, token) =>
 
 // Delete Batch (Admin or Superadmin)
 export const deleteBatch = (id, token) =>
-  api.delete(`/batch/delete/${id}`, {
+  api.delete(`/batches/${id}`, {
     headers: { Authorization: `Bearer ${token}` }
   });
 

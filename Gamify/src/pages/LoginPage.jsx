@@ -30,11 +30,15 @@ export default function LoginPage() {
       Cookies.set('id', response.data.userId, { expires: 7 });
       Cookies.set('authToken', response.data.token, { expires: 7 });
       Cookies.set('designation', response.data.designation, { expires: 7 });
+      // Save JWT token to localStorage for API authentication
+      localStorage.setItem('token', response.data.token);
+      // Optionally, also save to sessionStorage
+      sessionStorage.setItem('token', response.data.token);
       // On success, navigate based on designation
       if (form.designation === 'superadmin') {
         navigate('/superadmin/dashboard');
       } else if (form.designation === 'admin') {
-        navigate('/admin/dashboard');
+        navigate('/admin/dashboard?view=batches'); // Redirect admin to batches page
       } else if (form.designation === 'mentor') {
         navigate('/mentor/dashboard');
       } else {

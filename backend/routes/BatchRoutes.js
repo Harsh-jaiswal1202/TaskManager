@@ -18,7 +18,7 @@ import requireAuth from '../middleware/requireAuth.js';
 const router = express.Router();
 
 router.post('/', authenticateJWT, createBatch);
-router.get('/', getBatches);
+router.get('/', authenticateJWT, getBatches);
 router.post('/:id/assign-mentor', assignMentor);
 router.post('/:id/enroll', enrollUser);
 router.post('/:id/remove', removeUser);

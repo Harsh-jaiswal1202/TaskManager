@@ -5,6 +5,7 @@ import Cookies from "js-cookie";
 import axios from "axios";
 import { restrictAdmin, restrictUser, restrictMentor } from '../services/api';
 import EnhancedBatchModal from '../components/EnhancedBatchModal';
+import api from '../services/api';
 
 export default function SuperAdminDashboard() {
   const navigate = useNavigate();
@@ -42,7 +43,10 @@ export default function SuperAdminDashboard() {
     setLoading(true);
     setError("");
     try {
-      const res = await axios.get("http://localhost:3001/api/user/all", { withCredentials: true });
+      const token = Cookies.get('authToken');
+      const res = await axios.get("http://localhost:3001/api/user/all", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setAdmins(res.data.admins);
       setMentors(res.data.mentors || []);
       setUsers(res.data.users);
@@ -54,7 +58,7 @@ export default function SuperAdminDashboard() {
 
   const fetchBatches = async () => {
     try {
-      const res = await axios.get("http://localhost:3001/api/batches/", { withCredentials: true });
+      const res = await api.get("/batches/");
       setBatches(res.data);
     } catch (err) {
       // Optionally handle error
@@ -361,6 +365,12 @@ export default function SuperAdminDashboard() {
                             disabled={deleteLoading[batch._id]}
                           >
                             <FaTrash /> {deleteLoading[batch._id] ? 'Deleting...' : 'Delete'}
+                          </button>
+                          <button
+                            className="flex items-center gap-1 px-3 py-1 rounded bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:scale-105 text-xs font-semibold"
+                            onClick={() => window.location.href = `/batch/${batch._id}/course`}
+                          >
+                            📚 View Course
                           </button>
                         </div>
                       </div>

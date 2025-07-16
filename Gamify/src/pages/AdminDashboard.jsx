@@ -9,9 +9,10 @@ import { useState } from "react";
 import EmojiPicker from "emoji-picker-react";
 import "../index.css";
 import axios from "axios";
-import { restrictMentor, deleteBatch } from '../services/api';
+import { restrictMentor, deleteBatch, restrictUser } from '../services/api';
 import EnhancedBatchModal from '../components/EnhancedBatchModal';
 import BatchAnalytics from '../components/BatchAnalytics';
+import api from '../services/api';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -71,10 +72,10 @@ export default function Dashboard() {
   const fetchCurrentAdmin = async () => {
     try {
       // First, try to get the current user directly by ID
-      const userRes = await axios.get(`http://localhost:3001/api/user/${parentId}`, { withCredentials: true });
+      const userRes = await api.get(`/user/${parentId}`);
       console.log('Current user from direct API call:', userRes.data);
       
-      const res = await axios.get("http://localhost:3001/api/user/all", { withCredentials: true });
+      const res = await api.get("/user/all");
       const superadmins = res.data.superadmins || [];
       const admins = res.data.admins || [];
       // Find the current admin by matching the parentId in both superadmins and admins
@@ -114,9 +115,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const tabParam = params.get('tab');
-    if (tabParam && ['categories', 'mentors', 'batches', 'users'].includes(tabParam)) {
-      setTab(tabParam);
+    const view = params.get('view');
+    if (view && ['categories', 'batches', 'mentors', 'users'].includes(view)) {
+      setTab(view);
     }
     // eslint-disable-next-line
   }, [location.search]);
@@ -213,7 +214,7 @@ export default function Dashboard() {
 
   const fetchMentors = async () => {
     try {
-      const res = await axios.get("http://localhost:3001/api/user/all", { withCredentials: true });
+      const res = await api.get("/user/all");
       setMentors(res.data.mentors || []);
     } catch (err) {
       // Optionally handle error
@@ -221,7 +222,10 @@ export default function Dashboard() {
   };
   const fetchBatches = async () => {
     try {
-      const res = await axios.get(`http://localhost:3001/api/batches/`, { withCredentials: true });
+      const token = Cookies.get('authToken');
+      const res = await axios.get(`http://localhost:3001/api/batches/`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setBatches(res.data);
     } catch (err) {
       // Optionally handle error
@@ -230,7 +234,7 @@ export default function Dashboard() {
   const [users, setUsers] = useState([]);
   const fetchUsers = async () => {
     try {
-      const res = await axios.get("http://localhost:3001/api/user/all", { withCredentials: true });
+      const res = await api.get("/user/all");
       setUsers(res.data.users || []);
     } catch (err) {
       // Optionally handle error
@@ -414,6 +418,19 @@ export default function Dashboard() {
     }
   };
 
+  const handleToggleUserRestrict = async (userId) => {
+    setToggling((prev) => ({ ...prev, [userId]: true }));
+    console.log(userId);
+    try {
+      const token = Cookies.get('authToken');
+      await restrictUser(userId, token);
+      fetchUsers();
+    } catch (err) {
+      // Optionally handle error
+    }
+    setToggling((prev) => ({ ...prev, [userId]: false }));
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 pt-2 p-2 sm:p-4 md:p-8">
       {/* Animated Background Elements */}
@@ -447,12 +464,6 @@ export default function Dashboard() {
               <span className="text-lg sm:text-xl">🛡️</span>
             </div>
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3">
-              <button
-                onClick={() => setTab('categories')}
-                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full shadow-lg transition-all text-sm sm:text-base font-semibold ${tab === 'categories' ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white' : 'bg-gray-200 text-purple-700 hover:bg-purple-100'}`}
-              >
-                Categories
-              </button>
               <button
                 onClick={() => setTab('mentors')}
                 className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full shadow-lg transition-all text-sm sm:text-base font-semibold ${tab === 'mentors' ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white' : 'bg-gray-200 text-blue-700 hover:bg-blue-100'}`}
@@ -507,291 +518,6 @@ export default function Dashboard() {
         </nav>
 
         {/* Tab Content */}
-        {tab === 'categories' && (
-          <>
-            {/* Add Category Button (restored, only in Categories tab) */}
-            <div className="flex justify-end mb-4">
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="flex items-center gap-2 bg-gradient-to-r from-green-500 to-teal-500 text-white px-3 sm:px-4 py-2 rounded-full shadow-lg hover:scale-105 hover:shadow-xl transition-all text-sm sm:text-base"
-              >
-                <span>Add Category</span>
-                <span className="text-base sm:text-lg">📊</span>
-              </button>
-            </div>
-            {showAddModal && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
-                {/* Backdrop with subtle animation */}
-                <div
-                  className="fixed inset-0 bg-gradient-to-br from-purple-500/30 to-pink-500/30 backdrop-blur-sm"
-                  onClick={() => setShowAddModal(false)}
-                />
-                {/* Modal container with pop-in animation */}
-                <div className="relative bg-gradient-to-br from-white to-gray-50 rounded-2xl p-4 sm:p-6 shadow-2xl w-full max-w-md mx-4 animate-pop-in overflow-y-auto max-h-[90vh] sm:max-h-[85vh]">
-                  {/* Decorative elements */}
-                  <div className="absolute -top-3 -right-3 w-8 h-8 sm:w-12 sm:h-12 bg-yellow-400 rounded-full opacity-20 blur-md"></div>
-                  <div className="absolute -bottom-3 -left-3 w-12 h-12 sm:w-16 sm:h-16 bg-purple-400 rounded-full opacity-20 blur-md"></div>
-                  {/* Header */}
-                  <h2 className="text-xl sm:text-2xl font-bold text-center mb-4 sm:mb-6 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                    Create New Category
-                  </h2>
-                  {/* Input Fields */}
-                  <div className="space-y-4">
-                    {/* Name */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Category Name
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Enter category name"
-                        value={newCategoryName}
-                        onChange={(e) => setNewCategoryName(e.target.value)}
-                        className="w-full border-2 border-gray-200 rounded-xl px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base focus:outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100"
-                      />
-                    </div>
-                    {/* Emoji Picker */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Choose an emoji
-                      </label>
-                      <div className="border rounded-xl p-2 bg-gray-50 overflow-hidden">
-                        <EmojiPicker
-                          onEmojiClick={(emojiData) =>
-                            setSelectedEmoji(emojiData.emoji)
-                          }
-                          lazyLoadEmojis
-                          skinTonesDisabled
-                          height={window.innerWidth < 640 ? 250 : 300}
-                          width="100%"
-                          previewConfig={{ showPreview: false }}
-                          searchDisabled={window.innerWidth < 640}
-                        />
-                      </div>
-                      <p className="mt-2 text-sm sm:text-base">
-                        Selected: {selectedEmoji || "None"}
-                      </p>
-                    </div>
-                    {/* Color Picker */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Pick a color
-                      </label>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="color"
-                          value={selectedColor}
-                          onChange={(e) => setSelectedColor(e.target.value)}
-                          className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg cursor-pointer border border-gray-300"
-                        />
-                        <input
-                          type="text"
-                          value={selectedColor}
-                          onChange={(e) => setSelectedColor(e.target.value)}
-                          className="flex-1 px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                          placeholder="#8884d8"
-                        />
-                      </div>
-                      <p className="text-xs sm:text-sm mt-1 text-gray-600">
-                        Selected color: {selectedColor}
-                      </p>
-                    </div>
-                  </div>
-                  {/* Buttons */}
-                  <div className="flex flex-col sm:flex-row gap-3 mt-6">
-                    <button
-                      onClick={() => {
-                        handleAddCategory();
-                      }}
-                      className="flex-1 bg-green-500 text-white font-semibold px-4 sm:px-6 py-2 sm:py-3 rounded-xl hover:bg-green-600 transition-all text-sm sm:text-base"
-                    >
-                      🎉 Create
-                    </button>
-                    <button
-                      onClick={() => setShowAddModal(false)}
-                      className="flex-1 bg-white border-2 border-gray-200 text-gray-600 font-semibold px-4 sm:px-6 py-2 sm:py-3 rounded-xl hover:border-purple-300 text-sm sm:text-base"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Animated Category Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
-              {categories.map((category, index) => (
-                <motion.div
-                  key={category._id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: category._id * 0.05 }}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => {
-                    document
-                      .getElementById(`card-${category._id}`)
-                      ?.classList.add("animate-pulse");
-                    setTimeout(() => {
-                      Cookies.get("designation") === "admin"
-                        ? navigate(`/admin/task/${category._id}`)
-                        : navigate(`/task/${category._id}`);
-                    }, 300);
-                  }}
-                  className="cursor-pointer"
-                >
-                  <div
-                    id={`card-${category._id}`}
-                    className="h-full bg-white/90 backdrop-blur-sm shadow-md rounded-2xl p-3 sm:p-6 hover:shadow-xl transition-all border-t-8 flex flex-col text-base sm:text-lg"
-                    style={{ borderColor: category.color || "#ccc" }}
-                  >
-                    <div className="flex-1">
-                      <div
-                        className="text-2xl sm:text-4xl mb-2 sm:mb-3 text-center"
-                        style={{ color: category.color || "#333" }}
-                      >
-                        {category.emoji}
-                      </div>
-                      <h3 className="text-lg sm:text-xl font-bold text-center text-gray-800 mb-2">
-                        {category.name}
-                      </h3>
-                      <div className="w-full bg-gray-200 rounded-full h-2 mt-3 sm:mt-4">
-                        <div
-                          className="h-2 rounded-full transition-all duration-500"
-                          style={{
-                            width: `${Math.min(100, Math.random() * 30 + 20)}%`,
-                            backgroundColor: category.color || "#999",
-                          }}
-                        ></div>
-                      </div>
-                      <p className="text-xs text-gray-500 text-center mt-2">
-                        {category.tasks.length} quests available
-                      </p>
-                    </div>
-
-                    <button
-                      className="mt-3 sm:mt-4 w-full py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all hover:scale-105"
-                      style={{
-                        backgroundColor: `${category.color || "#ccc"}20`,
-                        color: category.color || "#333",
-                      }}
-                    >
-                      View Tasks →
-                    </button>
-                    {Cookies.get("id") === "admin" && (
-                      <div className="flex justify-end gap-2 sm:gap-3 mt-3">
-                        {/* Edit Button */}
-                        <motion.button
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.9 }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditModal({
-                              isOpen: true,
-                              category: category,
-                              name: category.name,
-                              emoji: category.emoji || "🎯",
-                              color: category.color || "#8884d8",
-                            });
-                          }}
-                          className="p-1.5 sm:p-2 rounded-full transition-all flex items-center justify-center hover:bg-opacity-30"
-                          style={{
-                            backgroundColor: `${category.color || "#4CAF50"}20`,
-                            color: category.color || "#4CAF50",
-                          }}
-                          title="Edit"
-                        >
-                          <FaEdit className="text-sm sm:text-lg" />
-                        </motion.button>
-
-                        {/* Delete Confirmation Modal */}
-                        {deleteModal.isOpen &&
-                          deleteModal.categoryId === category._id && (
-                            <motion.div
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              exit={{ opacity: 0 }}
-                              className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm"
-                            >
-                              <motion.div
-                                initial={{ scale: 0.9, y: 20 }}
-                                animate={{ scale: 1, y: 0 }}
-                                className="bg-white rounded-xl p-4 sm:p-6 w-full max-w-md mx-4 shadow-xl"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <div className="flex flex-col items-center text-center">
-                                  <div className="w-12 h-12 sm:w-16 sm:h-16 bg-red-100 rounded-full flex items-center justify-center mb-3 sm:mb-4">
-                                    <FaTrash className="text-xl sm:text-2xl text-red-500" />
-                                  </div>
-                                  <h3 className="text-lg sm:text-xl font-bold text-gray-800 mb-2">
-                                    Delete Category
-                                  </h3>
-                                  <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6">
-                                    Delete{" "}
-                                    <span className="font-semibold">
-                                      "{deleteModal.categoryName}"
-                                    </span>
-                                    ? This cannot be undone.
-                                  </p>
-
-                                  <div className="flex flex-col sm:flex-row gap-3 w-full">
-                                    <button
-                                      onClick={() =>
-                                        setDeleteModal({
-                                          isOpen: false,
-                                          categoryId: null,
-                                          categoryName: "",
-                                        })
-                                      }
-                                      className="flex-1 py-2 px-4 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors text-sm sm:text-base"
-                                    >
-                                      Cancel
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        handleDeleteCategory(
-                                          deleteModal.categoryId
-                                        );
-                                      }}
-                                      className="flex-1 py-2 px-4 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors flex items-center justify-center gap-2 text-sm sm:text-base"
-                                    >
-                                      <FaTrash />
-                                      Delete
-                                    </button>
-                                  </div>
-                                </div>
-                              </motion.div>
-                            </motion.div>
-                          )}
-
-                        {/* Delete Button */}
-                        <motion.button
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.9 }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteModal({
-                              isOpen: true,
-                              categoryId: category._id,
-                              categoryName: category.name,
-                            });
-                          }}
-                          className="p-1.5 sm:p-2 rounded-full transition-all flex items-center justify-center hover:bg-red-50"
-                          style={{
-                            color: "#f44336",
-                          }}
-                          title="Delete"
-                        >
-                          <FaTrash className="text-sm sm:text-lg" />
-                        </motion.button>
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </>
-        )}
         {tab === 'mentors' && (
           <div className="w-full max-w-3xl mx-auto">
             <h2 className="text-xl font-bold mb-4 text-blue-700">Mentors</h2>
@@ -881,6 +607,12 @@ export default function Dashboard() {
                         onClick={() => navigate(`/admin/batch/${batch._id}/analytics`)}
                       >
                         📊 Analytics
+                      </button>
+                      <button
+                        className="flex items-center gap-1 px-3 py-1 rounded bg-green-500 text-white hover:bg-green-600 text-xs font-semibold"
+                        onClick={() => window.location.href = `/batch/${batch._id}/course`}
+                      >
+                        📚 View Course
                       </button>
                       <button
                         onClick={() => handleDeleteBatch(batch._id)}
@@ -1003,6 +735,17 @@ export default function Dashboard() {
                     <div className="font-semibold text-pink-800">{user.username}</div>
                     <div className="text-sm text-gray-600">{user.email}</div>
                   </div>
+                  <button
+                    onClick={() => handleToggleUserRestrict(user._id)}
+                    disabled={toggling[user._id]}
+                    className={`px-4 py-2 rounded-full font-semibold shadow transition-all text-sm sm:text-base focus:outline-none ${user.restricted ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-green-500 hover:bg-green-600 text-white'} ${toggling[user._id] ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  >
+                    {toggling[user._id]
+                      ? 'Updating...'
+                      : user.restricted
+                      ? 'Unrestrict'
+                      : 'Restrict'}
+                  </button>
                 </div>
               ))}
             </div>

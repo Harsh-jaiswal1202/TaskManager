@@ -22,6 +22,7 @@ import SettingsPage from "./pages/SettingsPage";
 import BatchAnalyticsPage from './pages/BatchAnalyticsPage';
 import StudentBatchAnalyticsPage from './pages/StudentBatchAnalyticsPage';
 import BatchCoursePage from './pages/BatchCoursePage';
+import BatchCategoryTaskPage from './pages/BatchCategoryTaskPage';
 
 function Root() {
   return (
@@ -52,6 +53,7 @@ function Root() {
               <Route path="/admin/batch/:id/analytics" element={<BatchAnalyticsPage />} />
               <Route path="/batch/:id/analytics" element={<StudentBatchAnalyticsPage />} />
               <Route path="/batch/:id/course" element={<BatchCoursePage />} />
+              <Route path="/batch/:batchId/category/:categoryId" element={<BatchCategoryTaskPage />} />
               <Route path="/coming-soon" element={<ComingSoon />} />
               
               {/* Super Admin Route */}
