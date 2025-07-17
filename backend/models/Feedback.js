@@ -6,6 +6,7 @@ const feedbackSchema = new mongoose.Schema({
   batch: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch', required: true },
   content: { type: String, required: true },
   rating: { type: Number, min: 1, max: 5, required: true },
+  task: { type: mongoose.Schema.Types.ObjectId, ref: 'Task' }, // Optional: feedback on a specific task
   createdAt: { type: Date, default: Date.now },
 });
 

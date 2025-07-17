@@ -1,5 +1,5 @@
 import express from 'express';
-import {getAllTasks,getAllTasksForBatch,createTask,deleteTask,editTask,startTask,completeTask} from '../controllers/Task.js';
+import {getAllTasks,getAllTasksForBatch,createTask,deleteTask,editTask,startTask,completeTask, assignTaskUsers} from '../controllers/Task.js';
 
 const router = express.Router();
 
@@ -20,5 +20,6 @@ router.delete('/delete/:id',deleteTask)
 
 // PATCH Routes
 router.patch('/edit/:id',editTask)
+router.patch('/assign/:id', assignTaskUsers)
 
 export default router;

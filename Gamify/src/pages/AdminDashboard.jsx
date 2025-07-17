@@ -13,6 +13,7 @@ import { restrictMentor, deleteBatch, restrictUser } from '../services/api';
 import EnhancedBatchModal from '../components/EnhancedBatchModal';
 import BatchAnalytics from '../components/BatchAnalytics';
 import api from '../services/api';
+import EnhancedTaskModal from '../components/EnhancedTaskModal';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -35,7 +36,7 @@ export default function Dashboard() {
     emoji: "",
     color: "",
   });
-  const [tab, setTab] = useState('categories'); // 'categories', 'mentors', 'batches'
+  const [tab, setTab] = useState('categories'); // 'categories', 'mentors', 'batches', 'tasks'
   const [mentors, setMentors] = useState([]);
   const [batches, setBatches] = useState([]);
   const [toggling, setToggling] = useState({});
@@ -56,6 +57,12 @@ export default function Dashboard() {
   const [selectedBatchForAnalytics, setSelectedBatchForAnalytics] = useState(null);
   const [allTasks, setAllTasks] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(false);
+  const [tasks, setTasks] = useState([]);
+  const [showEnhancedTaskModal, setShowEnhancedTaskModal] = useState(false);
+  const [taskModalLoading, setTaskModalLoading] = useState(false);
+  const [taskModalError, setTaskModalError] = useState('');
+  const [isTaskEditMode, setIsTaskEditMode] = useState(false);
+  const [editTask, setEditTask] = useState(null);
   const parentId = Cookies.get("id");
   const designation = Cookies.get("designation");
   const isValidParentId = parentId && parentId.trim() && parentId !== "undefined" && parentId !== "null";
@@ -253,6 +260,15 @@ export default function Dashboard() {
     setTasksLoading(false);
   };
 
+  const fetchCategories = async () => {
+    try {
+      const res = await axios.get('http://localhost:3001/api/categories/all', { withCredentials: true });
+      setCategories(res.data || []);
+    } catch (err) {
+      setCategories([]);
+    }
+  };
+
   useEffect(() => {
     if (tab === 'mentors') fetchMentors();
     if (tab === 'batches') fetchBatches();
@@ -429,6 +445,47 @@ export default function Dashboard() {
       // Optionally handle error
     }
     setToggling((prev) => ({ ...prev, [userId]: false }));
+  };
+
+  const handleCreateTask = () => {
+    setIsTaskEditMode(false);
+    setEditTask(null);
+    setShowEnhancedTaskModal(true);
+  };
+
+  const handleEditTask = (task) => {
+    setIsTaskEditMode(true);
+    setEditTask(task);
+    setShowEnhancedTaskModal(true);
+  };
+
+  const handleDeleteTask = async (taskId) => {
+    if (!window.confirm('Are you sure you want to delete this task?')) return;
+    setTaskModalLoading(true);
+    try {
+      await axios.delete(`http://localhost:3001/api/task/delete/${taskId}`, { withCredentials: true });
+      fetchTasks();
+    } catch (err) {}
+    setTaskModalLoading(false);
+  };
+
+  const handleEnhancedTaskSubmit = async (data) => {
+    setTaskModalLoading(true);
+    setTaskModalError('');
+    try {
+      if (data.isEditMode && data.taskId) {
+        await axios.patch(`http://localhost:3001/api/task/edit/${data.taskId}`, data, { withCredentials: true });
+      } else {
+        await axios.post('http://localhost:3001/api/task/create', data, { withCredentials: true });
+      }
+      setShowEnhancedTaskModal(false);
+      setEditTask(null);
+      setIsTaskEditMode(false);
+      fetchTasks();
+    } catch (err) {
+      setTaskModalError('Failed to save task.');
+    }
+    setTaskModalLoading(false);
   };
 
   return (

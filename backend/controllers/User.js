@@ -2,6 +2,7 @@ import User from '../models/User.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import config from '../config.js';
+import Task from '../models/Task.js';
 
 const registerUser = async (req, res) => {
   const { name, email, password, designation, parentId } = req.body;
@@ -199,13 +200,121 @@ const updateUser = async (req, res) => {
   }
 };
 
+// User Progress Analytics for Dashboard
+const getUserProgressAnalytics = async (req, res) => {
+  try {
+    const { id } = req.params;
+    // 1. Get user XP
+    const user = await User.findById(id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    const xps = user.xps || 0;
+
+    // 2. Get all tasks assigned to user
+    const assignedTasks = await Task.find({ assignedTo: id });
+    const tasksAssigned = assignedTasks.length;
+
+    // 3. Get completed tasks (assume Task model has a completedBy or similar, else use local completion records)
+    // For now, assume each Task has a completedBy: [userId] array
+    const completedTasks = assignedTasks.filter(task => (task.completedBy || []).includes(id));
+    const tasksCompleted = completedTasks.length;
+
+    // 4. Calculate streak (consecutive days with at least one completed task)
+    let currentStreak = 0;
+    if (completedTasks.length > 0) {
+      // Get all completion dates for this user
+      const dates = [];
+      completedTasks.forEach(task => {
+        if (task.completionRecords) {
+          // If using a completionRecords: [{userId, date}] array
+          task.completionRecords.forEach(rec => {
+            if (String(rec.userId) === String(id)) dates.push(new Date(rec.date));
+          });
+        } else if (task.completedAt) {
+          // If using completedAt per user
+          dates.push(new Date(task.completedAt));
+        }
+      });
+      // Remove duplicates and sort
+      const uniqueDays = Array.from(new Set(dates.map(d => d.toDateString()))).sort((a, b) => new Date(b) - new Date(a));
+      // Calculate streak
+      let streak = 0;
+      let prev = new Date();
+      for (let day of uniqueDays) {
+        const d = new Date(day);
+        if (streak === 0) {
+          if ((new Date().toDateString() === d.toDateString())) {
+            streak = 1;
+          } else {
+            break;
+          }
+        } else {
+          prev.setDate(prev.getDate() - 1);
+          if (prev.toDateString() === d.toDateString()) {
+            streak++;
+          } else {
+            break;
+          }
+        }
+        prev = d;
+      }
+      currentStreak = streak;
+    }
+
+    // 5. Average Score (if available)
+    // For now, use a placeholder or calculate from feedback/other model if available
+    let averageScore = 0;
+    if (assignedTasks.length > 0) {
+      // If Task has a 'score' field per user, average it
+      let total = 0, count = 0;
+      assignedTasks.forEach(task => {
+        if (task.scores && task.scores.length > 0) {
+          const userScore = task.scores.find(s => String(s.userId) === String(id));
+          if (userScore) {
+            total += userScore.value;
+            count++;
+          }
+        }
+      });
+      if (count > 0) averageScore = Math.round(total / count);
+    }
+
+    // 6. Tasks completed over time (for chart)
+    // Group by day
+    const completedOverTime = {};
+    completedTasks.forEach(task => {
+      if (task.completionRecords) {
+        task.completionRecords.forEach(rec => {
+          if (String(rec.userId) === String(id)) {
+            const day = new Date(rec.date).toLocaleDateString();
+            completedOverTime[day] = (completedOverTime[day] || 0) + 1;
+          }
+        });
+      } else if (task.completedAt) {
+        const day = new Date(task.completedAt).toLocaleDateString();
+        completedOverTime[day] = (completedOverTime[day] || 0) + 1;
+      }
+    });
+
+    res.json({
+      xps,
+      tasksAssigned,
+      tasksCompleted,
+      currentStreak,
+      averageScore,
+      completedOverTime,
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch user progress analytics', error: err.message });
+  }
+};
+
 // JWT auth middleware
 const authenticateJWT = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  // Try to get token from cookies first, then from Authorization header
+  const token = req.cookies?.authToken || (req.headers.authorization && req.headers.authorization.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null);
+  if (!token) {
     return res.status(401).json({ message: 'No token provided' });
   }
-  const token = authHeader.split(' ')[1];
   jwt.verify(token, config.jwtSecret, (err, user) => {
     if (err) {
       return res.status(403).json({ message: 'Invalid token' });
@@ -321,4 +430,4 @@ const deleteAccount = async (req, res) => {
   }
 };
 
-export  { registerUser, loginUser, getAllUsers, toggleAdminRestriction, authenticateJWT, toggleUserRestriction, toggleMentorRestriction, getUserById, updateUser, updatePassword, updateEmail, deleteAccount };
+export  { registerUser, loginUser, getAllUsers, toggleAdminRestriction, authenticateJWT, toggleUserRestriction, toggleMentorRestriction, getUserById, updateUser, updatePassword, updateEmail, deleteAccount, getUserProgressAnalytics };

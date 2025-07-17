@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import connect from "./connection.js";
 import CategoryRoutes from "./routes/CategoryRoutes.js";
 import TaskRoutes from "./routes/TaskRoutes.js";
@@ -20,6 +21,7 @@ app.use(cors({
   ],
   credentials: true
 }));
+app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 

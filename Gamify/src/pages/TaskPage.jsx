@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import Cookies from "js-cookie";
+import FeedbackModal from '../components/FeedbackModal';
 
 const categoryColors = {
   1: {
@@ -78,6 +79,8 @@ export default function TaskPage() {
 
   const [flippedCards, setFlippedCards] = useState([]);
   const [showRewardPopup, setShowRewardPopup] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackTaskId, setFeedbackTaskId] = useState(null);
 
   const handleClaimReward = () => {
     // Show the reward popup first
@@ -213,6 +216,9 @@ export default function TaskPage() {
       } else {
         setTimeout(() => navigate(`/survey/${categoryID}`), 800);
       }
+      // After marking as completed, show feedback modal for this task
+      setFeedbackTaskId(task._id);
+      setShowFeedbackModal(true);
     } catch (error) {
       console.error("Error completing task:", error.message);
     }
@@ -594,6 +600,14 @@ export default function TaskPage() {
                   }`}
                 />
               )}
+              {completedTasks.some(t => t.taskName === task.name) && (
+                <button
+                  className="mt-2 px-4 py-2 bg-gradient-to-r from-green-400 to-blue-500 text-white rounded-lg shadow hover:scale-105 transition"
+                  onClick={() => { setFeedbackTaskId(task._id); setShowFeedbackModal(true); }}
+                >
+                  Give Feedback
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -725,6 +739,16 @@ export default function TaskPage() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Feedback Modal */}
+        {showFeedbackModal && (
+          <FeedbackModal
+            toUserId={category?.mentor || category?.admin} // or pass mentor/admin id as appropriate
+            batchId={batchId}
+            taskId={feedbackTaskId}
+            onClose={() => setShowFeedbackModal(false)}
+          />
+        )}
       </div>
     </div>
   );

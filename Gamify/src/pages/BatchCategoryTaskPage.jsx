@@ -3,6 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import axios from "axios";
 import Cookies from "js-cookie";
+import EnhancedTaskModal from '../components/EnhancedTaskModal';
+import { FaTrash } from 'react-icons/fa';
 
 const difficultyOptions = ["Easy", "Medium", "Hard", "Popular", "Trending"];
 
@@ -21,6 +23,12 @@ export default function BatchCategoryTaskPage() {
   const [difficulty, setDifficulty] = useState("Easy");
   const [isSubmitted, setIsSubmitted] = useState(false);
   const userDesignation = Cookies.get('designation');
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editTask, setEditTask] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalError, setModalError] = useState('');
 
   useEffect(() => {
     setLoading(true);
@@ -35,6 +43,14 @@ export default function BatchCategoryTaskPage() {
     const saved = localStorage.getItem(`completedTasks-${categoryId}`);
     setCompletedTasks(saved ? JSON.parse(saved) : []);
   }, [categoryId, batchId, isSubmitted]);
+
+  useEffect(() => {
+    if (userDesignation === 'admin' || userDesignation === 'mentor' || userDesignation === 'superadmin') {
+      axios.get('http://localhost:3001/api/user/all', { withCredentials: true })
+        .then(res => setUsers(res.data.users || []))
+        .catch(() => setUsers([]));
+    }
+  }, [userDesignation]);
 
   const handleFlip = (index) => {
     if (!flippedCards.includes(index)) {
@@ -57,26 +73,49 @@ export default function BatchCategoryTaskPage() {
     localStorage.setItem(`completedTasks-${categoryId}`, JSON.stringify(updated));
   };
 
-  const handleCreateTask = (e) => {
-    e.preventDefault();
-    if (!taskName.trim()) return;
-    const newTask = {
-      name: taskName.trim(),
-      description: description.trim(),
-      details: details.trim(),
-      difficulty: difficulty,
-      category: categoryId,
-    };
-    axios.post("http://localhost:3001/api/tasks/create", newTask)
-      .then(() => {
-        setIsSubmitted(true);
-        setTaskName("");
-        setDescription("");
-        setDetails("");
-        setDifficulty("Easy");
-        setTimeout(() => setIsSubmitted(false), 1500);
-      })
-      .catch(() => setIsSubmitted(false));
+  const handleOpenCreateModal = () => {
+    setIsEditMode(false);
+    setEditTask(null);
+    setShowTaskModal(true);
+  };
+
+  const handleOpenEditModal = (task) => {
+    setIsEditMode(true);
+    setEditTask(task);
+    setShowTaskModal(true);
+  };
+
+  const handleDeleteTask = async (taskId) => {
+    setModalLoading(true);
+    try {
+      await axios.delete(`http://localhost:3001/api/tasks/delete/${taskId}`, { withCredentials: true });
+      // Refresh tasks
+      axios.get(`http://localhost:3001/api/categories/all/tasks/${categoryId}?batchId=${batchId}`)
+        .then(res => setTasks(res.data.tasks || []));
+    } catch (err) {}
+    setModalLoading(false);
+  };
+
+  const handleTaskModalSubmit = async (data) => {
+    setModalLoading(true);
+    setModalError('');
+    try {
+      if (data.isEditMode && data.taskId) {
+        await axios.patch(`http://localhost:3001/api/tasks/edit/${data.taskId}`, data, { withCredentials: true });
+      } else {
+        // Inject categoryId into the data for task creation
+        await axios.post('http://localhost:3001/api/tasks/create', { ...data, category: categoryId }, { withCredentials: true });
+      }
+      setShowTaskModal(false);
+      setEditTask(null);
+      setIsEditMode(false);
+      // Refresh tasks
+      axios.get(`http://localhost:3001/api/categories/all/tasks/${categoryId}?batchId=${batchId}`)
+        .then(res => setTasks(res.data.tasks || []));
+    } catch (err) {
+      setModalError('Failed to save task.');
+    }
+    setModalLoading(false);
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-xl">Loading...</div>;
@@ -88,47 +127,35 @@ export default function BatchCategoryTaskPage() {
         onClick={() => navigate(`/batch/${batchId}/course`)}
         className="mb-6 px-4 py-2 rounded-lg bg-purple-100 text-purple-700 font-semibold hover:bg-purple-200 transition-all"
       >
-        ← Back to Categories
+        ← Back
       </button>
       <div className="text-center mb-6">
         <div className="text-6xl mb-2" style={{ color: category.color }}>{category.emoji}</div>
         <h2 className="text-3xl font-bold mb-1" style={{ color: category.color }}>{category.name}</h2>
       </div>
       {/* Task Creation UI for admins/mentors */}
-      {(userDesignation === 'admin' || userDesignation === 'mentor') && (
-        <div className="mb-8">
+      {(userDesignation === 'admin' || userDesignation === 'mentor' || userDesignation === 'superadmin') && (
+        <>
+          {/* Floating Create Task Button - top right */}
           <button
-            className="mb-4 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold shadow hover:scale-105"
-            onClick={() => setShowCreate((v) => !v)}
+            style={{ position: 'absolute', top: 32, right: 32, zIndex: 50 }}
+            className="px-5 py-3 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold shadow-lg hover:scale-105 transition-all text-base"
+            onClick={handleOpenCreateModal}
           >
-            {showCreate ? 'Hide Task Creator' : 'Create New Task'}
+            + Create New Task
           </button>
-          {showCreate && (
-            <form onSubmit={handleCreateTask} className="bg-white p-6 rounded-2xl shadow border mb-4">
-              <h3 className="text-xl font-bold mb-4 text-emerald-700">Create Task</h3>
-              <div className="mb-3">
-                <label className="block mb-1 font-medium text-gray-700">Task Name</label>
-                <input type="text" value={taskName} onChange={e => setTaskName(e.target.value)} className="w-full border rounded-lg px-3 py-2" placeholder="What's your mission?" />
-              </div>
-              <div className="mb-3">
-                <label className="block mb-1 font-medium text-gray-700">Short Description</label>
-                <input type="text" value={description} onChange={e => setDescription(e.target.value)} className="w-full border rounded-lg px-3 py-2" placeholder="Quick summary..." />
-              </div>
-              <div className="mb-3">
-                <label className="block mb-1 font-medium text-gray-700">Detailed Instructions</label>
-                <textarea value={details} onChange={e => setDetails(e.target.value)} rows={3} className="w-full border rounded-lg px-3 py-2" placeholder="Step-by-step guide..." />
-              </div>
-              <div className="mb-3">
-                <label className="block mb-1 font-medium text-gray-700">Difficulty Level</label>
-                <select value={difficulty} onChange={e => setDifficulty(e.target.value)} className="w-full border rounded-lg px-3 py-2">
-                  {difficultyOptions.map(option => <option key={option}>{option}</option>)}
-                </select>
-              </div>
-              <button type="submit" className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold py-2 px-6 rounded-lg shadow mt-2">Create Task</button>
-              {isSubmitted && <div className="text-green-600 mt-2">Task created!</div>}
-            </form>
-          )}
-        </div>
+          <EnhancedTaskModal
+            isOpen={showTaskModal}
+            onClose={() => { setShowTaskModal(false); setEditTask(null); setIsEditMode(false); setModalError(''); }}
+            onSubmit={handleTaskModalSubmit}
+            users={users}
+            loading={modalLoading}
+            error={modalError}
+            isEditMode={isEditMode}
+            initialTaskData={editTask}
+            categories={category ? [category] : []}
+          />
+        </>
       )}
       {/* Task Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 px-0 sm:px-2 py-4">
@@ -148,6 +175,16 @@ export default function BatchCategoryTaskPage() {
               <motion.div
                 className={`absolute w-full h-full backface-hidden rounded-2xl p-3 shadow-2xl bg-gradient-to-br from-white via-blue-50 to-purple-50 border-2 border-gray-100 flex flex-col justify-between`}
               >
+                {/* Delete icon button - top right */}
+                {(userDesignation === 'admin' || userDesignation === 'mentor' || userDesignation === 'superadmin') && (
+                  <button
+                    onClick={() => handleDeleteTask(task._id)}
+                    style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', fontSize: '1.3rem', cursor: 'pointer', zIndex: 10 }}
+                    title="Delete Task"
+                  >
+                    <FaTrash style={{ color: '#e11d48', fontSize: '1.3rem' }} />
+                  </button>
+                )}
                 <div>
                   <div className="w-8 h-8 rounded-full flex items-center justify-center bg-gradient-to-br from-blue-500 to-purple-500 text-white text-base font-bold mb-3 shadow-lg border-2 border-white">
                     {index + 1}
@@ -155,15 +192,26 @@ export default function BatchCategoryTaskPage() {
                   <h3 className="text-lg font-bold text-gray-800 mb-1 leading-tight truncate">{task.name}</h3>
                   <p className="text-sm text-gray-500 mb-2 line-clamp-2 min-h-[1.5rem]">{task.description || "Complete this task to earn rewards!"}</p>
                 </div>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => handleFlip(index)}
-                  disabled={completedTasks.some((t) => t.taskName === task.name)}
-                  className={`mt-1 w-full py-1.5 rounded-lg font-bold shadow-md transition-all duration-200 text-xs ${completedTasks.some((t) => t.taskName === task.name) ? "bg-emerald-500 text-white" : "bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:from-purple-500 hover:to-blue-500"}`}
-                >
-                  {completedTasks.some((t) => t.taskName === task.name) ? "Completed ✓" : "View Task"}
-                </motion.button>
+                {/* Action buttons at the bottom */}
+                <div className="flex gap-2 mt-4 w-full">
+                  {(userDesignation === 'admin' || userDesignation === 'mentor' || userDesignation === 'superadmin') && (
+                    <button
+                      onClick={() => handleOpenEditModal(task)}
+                      className="w-1/2 py-2 rounded-bl-lg bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium hover:opacity-90 transition-opacity text-xs"
+                    >
+                      Edit
+                    </button>
+                  )}
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => handleFlip(index)}
+                    disabled={completedTasks.some((t) => t.taskName === task.name)}
+                    className={`w-1/2 py-2 rounded-br-lg font-bold shadow-md transition-all duration-200 text-xs ${completedTasks.some((t) => t.taskName === task.name) ? "bg-emerald-500 text-white" : "bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:from-purple-500 hover:to-blue-500"}`}
+                  >
+                    {completedTasks.some((t) => t.taskName === task.name) ? "Completed ✓" : "View Task"}
+                  </motion.button>
+                </div>
               </motion.div>
               {/* Back of card */}
               <motion.div
@@ -180,7 +228,8 @@ export default function BatchCategoryTaskPage() {
                   >
                     Back
                   </motion.button>
-                  {!completedTasks.some((t) => t.taskName === task.name) && (
+                  {/* Only show Mark Complete for users, not admin/mentor */}
+                  {userDesignation === 'user' && !completedTasks.some((t) => t.taskName === task.name) && (
                     <motion.button
                       whileHover={{ scale: 1.03 }}
                       whileTap={{ scale: 0.97 }}

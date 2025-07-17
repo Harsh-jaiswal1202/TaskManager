@@ -1,5 +1,5 @@
 import express from 'express';
-import { registerUser, loginUser, getAllUsers, toggleAdminRestriction, authenticateJWT, toggleUserRestriction, toggleMentorRestriction, getUserById, updateUser, updatePassword, updateEmail, deleteAccount } from '../controllers/User.js';
+import { registerUser, loginUser, getAllUsers, toggleAdminRestriction, authenticateJWT, toggleUserRestriction, toggleMentorRestriction, getUserById, updateUser, updatePassword, updateEmail, deleteAccount, getUserProgressAnalytics } from '../controllers/User.js';
 
 
 const router = express.Router();
@@ -8,6 +8,7 @@ router.post('/register', registerUser);
 router.post('/login', loginUser);
 router.get('/all', authenticateJWT, getAllUsers);
 router.get('/:id', getUserById);
+router.get('/:id/progress', getUserProgressAnalytics);
 router.patch('/restrict/:id', authenticateJWT, toggleAdminRestriction);
 router.patch('/restrict-user/:id', authenticateJWT, toggleUserRestriction);
 router.patch('/restrict-mentor/:id', authenticateJWT, toggleMentorRestriction);

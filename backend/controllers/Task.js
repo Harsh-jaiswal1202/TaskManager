@@ -69,7 +69,7 @@ const getAllTasksForBatch = async (req, res) => {
 
 async function createTask(req, res) {
   try {
-    const { name, description, details, category, difficulty } = req.body;
+    const { name, description, details, category, difficulty, assignedTo = [] } = req.body;
 
     // Step 1: Create the new task
     const task = await Task.create({
@@ -78,6 +78,7 @@ async function createTask(req, res) {
       details,
       category,
       difficulty,
+      assignedTo,
     });
 
     // Step 2: Push the task reference into the Category model
@@ -110,16 +111,35 @@ async function deleteTask(req, res) {
 
 async function editTask(req, res) {
   const { id } = req.params;
-  const { details, difficulty } = req.body;
+  const { details, difficulty, assignedTo } = req.body;
 
   try {
+    const updateFields = { details, difficulty };
+    if (assignedTo) updateFields.assignedTo = assignedTo;
     const task = await Task.findByIdAndUpdate(
       id,
-      { details, difficulty },
+      updateFields,
       { new: true }
     );
     if (!task) return res.status(404).json({ error: "Task not found" });
 
+    res.json(task);
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+}
+
+// Assign users to a task (PATCH)
+async function assignTaskUsers(req, res) {
+  const { id } = req.params;
+  const { assignedTo } = req.body;
+  try {
+    const task = await Task.findByIdAndUpdate(
+      id,
+      { assignedTo },
+      { new: true }
+    );
+    if (!task) return res.status(404).json({ error: "Task not found" });
     res.json(task);
   } catch (err) {
     res.status(500).json({ error: "Server error" });
@@ -134,4 +154,5 @@ export {
   editTask,
   startTask,
   completeTask,
+  assignTaskUsers,
 };

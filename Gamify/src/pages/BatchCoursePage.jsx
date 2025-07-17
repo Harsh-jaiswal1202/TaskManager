@@ -18,6 +18,8 @@ export default function BatchCoursePage() {
   const [categoryLoading, setCategoryLoading] = useState(false);
   const userId = Cookies.get('id');
   const [showAddModal, setShowAddModal] = useState(false);
+  // Add state to store task counts for each category
+  const [categoryTaskCounts, setCategoryTaskCounts] = useState({});
 
   // Fetch batch and categories
   useEffect(() => {
@@ -83,6 +85,25 @@ export default function BatchCoursePage() {
       .then(() => fetchCategories())
       .catch(() => setCategoryLoading(false));
   };
+
+  // Fetch task counts for each category after categories are loaded
+  useEffect(() => {
+    if (categories.length > 0) {
+      const fetchCounts = async () => {
+        const counts = {};
+        await Promise.all(categories.map(async (cat) => {
+          try {
+            const res = await axios.get(`http://localhost:3001/api/categories/all/tasks/${cat._id}`);
+            counts[cat._id] = res.data.tasks ? res.data.tasks.length : 0;
+          } catch {
+            counts[cat._id] = 0;
+          }
+        }));
+        setCategoryTaskCounts(counts);
+      };
+      fetchCounts();
+    }
+  }, [categories]);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-xl">Loading...</div>;
   if (error) return <div className="min-h-screen flex items-center justify-center text-red-600">{error}</div>;
@@ -155,13 +176,13 @@ export default function BatchCoursePage() {
       </div>
       {/* Header Bar */}
       <div className="relative z-10 mb-8 flex justify-end items-center">
-        {/* Add Category Button - only for non-users */}
-        {userDesignation !== 'user' && (
+        {/* Create Lesson Button - for admin, superadmin, and mentor */}
+        {(userDesignation === 'admin' || userDesignation === 'superadmin' || userDesignation === 'mentor') && (
           <button
             onClick={() => setShowAddModal(true)}
             className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-full font-semibold shadow hover:scale-105 transition-all"
           >
-            + Add Category
+            + Create Lesson
           </button>
         )}
       </div>
@@ -175,42 +196,47 @@ export default function BatchCoursePage() {
           {/* Modal container */}
           <div className="relative bg-white rounded-2xl p-6 shadow-2xl w-full max-w-md mx-4 animate-pop-in overflow-y-auto max-h-[90vh]">
             <h2 className="text-xl font-bold text-center mb-4 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-              Create New Category
+              Create New Lesson
             </h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Category Name</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Lesson Name</label>
                 <input
                   type="text"
-                  placeholder="Enter category name"
+                  placeholder="Enter lesson name"
                   value={newCategory.name}
                   onChange={e => setNewCategory({ ...newCategory, name: e.target.value })}
                   className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100"
                 />
               </div>
-              {/* Removed Emoji input section */}
+              {/* Only show Lesson Emoji input if not mentor */}
+              {userDesignation !== 'mentor' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Lesson Emoji</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 📚"
+                    value={newCategory.emoji}
+                    onChange={e => setNewCategory({ ...newCategory, emoji: e.target.value })}
+                    className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100"
+                  />
+                </div>
+              )}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Color</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Lesson Color</label>
                 <input
                   type="color"
                   value={newCategory.color}
                   onChange={e => setNewCategory({ ...newCategory, color: e.target.value })}
-                  className="w-10 h-10 rounded-lg border"
+                  className="w-12 h-8 p-0 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100"
                 />
               </div>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3 mt-6">
               <button
-                onClick={() => setShowAddModal(false)}
-                className="flex-1 bg-white border-2 border-gray-200 text-gray-600 font-semibold px-4 py-2 rounded-xl hover:border-purple-300 text-sm"
+                onClick={handleCreateCategory}
+                className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-2 rounded-xl font-semibold shadow hover:scale-105 transition-all"
+                disabled={categoryLoading}
               >
-                Cancel
-              </button>
-              <button
-                onClick={() => { handleCreateCategory(); setShowAddModal(false); }}
-                className="flex-1 bg-gradient-to-r from-green-500 to-teal-500 text-white font-semibold px-4 py-2 rounded-xl hover:bg-green-600 text-sm"
-              >
-                Create
+                {categoryLoading ? 'Creating...' : 'Create Lesson'}
               </button>
             </div>
           </div>
@@ -231,13 +257,13 @@ export default function BatchCoursePage() {
               <div
                 className="h-2 rounded-full transition-all duration-500"
                 style={{
-                  width: `${cat.tasks && cat.tasks.length ? Math.min(100, cat.tasks.length * 20) : 0}%`,
+                  width: `${categoryTaskCounts[cat._id] && categoryTaskCounts[cat._id] > 0 ? Math.min(100, categoryTaskCounts[cat._id] * 20) : 0}%`,
                   backgroundColor: cat.color || '#999',
                 }}
               ></div>
             </div>
             <div className="text-xs text-gray-500 mb-4 text-center">
-              {cat.tasks && cat.tasks.length} quests available
+              {categoryTaskCounts[cat._id] || 0} tasks available
             </div>
       <button
               className="w-full py-2 rounded-lg text-sm font-semibold transition-all hover:underline bg-gray-100 text-blue-600"
@@ -384,7 +410,7 @@ function TaskCardModal({ category, batchId, onClose }) {
           <h2 className="text-3xl font-bold mb-1" style={{ color: category.color }}>{category.name}</h2>
         </div>
         {/* Task Creation UI for admins/mentors */}
-        {(userDesignation === 'admin' || userDesignation === 'mentor') && (
+        {(userDesignation === 'admin' || userDesignation === 'mentor' || userDesignation === 'superadmin') && (
           <div className="mb-8">
             <button
               className="mb-4 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold shadow hover:scale-105"
