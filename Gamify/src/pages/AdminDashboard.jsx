@@ -6,7 +6,6 @@ import Cookies from "js-cookie";
 import { FaEdit, FaTrash, FaSave, FaTimes, FaRegCopy } from "react-icons/fa";
 import { AnimatePresence } from "framer-motion";
 import { useState } from "react";
-import EmojiPicker from "emoji-picker-react";
 import "../index.css";
 import axios from "axios";
 import { restrictMentor, deleteBatch, restrictUser } from '../services/api';
@@ -21,7 +20,6 @@ export default function Dashboard() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [categories, setCategories] = useState([]);
-  const [selectedEmoji, setSelectedEmoji] = useState("🎯");
   const [selectedColor, setSelectedColor] = useState("#8884d8");
   const [loading, setLoading] = useState(true);
   const [deleteModal, setDeleteModal] = useState({
@@ -33,7 +31,6 @@ export default function Dashboard() {
     isOpen: false,
     category: null,
     name: "",
-    emoji: "",
     color: "",
   });
   const [tab, setTab] = useState('categories'); // 'categories', 'mentors', 'batches', 'tasks'
@@ -147,7 +144,6 @@ export default function Dashboard() {
 
     const newCategory = {
       name: newCategoryName,
-      emoji: selectedEmoji || "🎯",
       color: selectedColor || "#8884d8",
     };
 
@@ -158,7 +154,6 @@ export default function Dashboard() {
       .then((res) => {
         setCategories((prev) => [...prev, res.data]);
         setNewCategoryName("");
-        setSelectedEmoji("🎯");
         setSelectedColor("#8884d8");
         setShowAddModal(false);
       })
@@ -174,7 +169,6 @@ export default function Dashboard() {
     try {
       const updatedCategory = {
         name: editModal.name,
-        emoji: editModal.emoji,
         color: editModal.color,
       };
 
@@ -194,7 +188,6 @@ export default function Dashboard() {
         isOpen: false,
         category: null,
         name: "",
-        emoji: "",
         color: "",
       });
     } catch (err) {
@@ -838,7 +831,6 @@ export default function Dashboard() {
                       isOpen: false,
                       category: null,
                       name: "",
-                      emoji: "",
                       color: "",
                     })
                   }
@@ -850,36 +842,6 @@ export default function Dashboard() {
 
               {/* Content Container */}
               <div className="space-y-6 min-w-0 flex flex-col">
-                {/* Emoji Picker Section */}
-                <div className="flex flex-col min-w-0 mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Emoji
-                  </label>
-                  <div className="flex flex-col items-center gap-3 sm:gap-4 min-w-0">
-                    {/* Selected Emoji Display */}
-                    <div className="w-12 h-12 sm:w-16 sm:h-16 flex items-center justify-center text-2xl sm:text-4xl bg-white rounded-full border-2 border-gray-200 shadow-sm mb-2">
-                      {editModal.emoji || "🎯"}
-                    </div>
-                    {/* Emoji Picker */}
-                    <div className="w-full min-w-0 max-w-full border rounded-xl p-2 bg-gray-50 mb-4">
-                      <EmojiPicker
-                        onEmojiClick={(emojiData) =>
-                          setEditModal((p) => ({
-                            ...p,
-                            emoji: emojiData.emoji,
-                          }))
-                        }
-                        skinTonesDisabled
-                        height={window.innerWidth < 640 ? 220 : 300}
-                        lazyLoadEmojis
-                        width="100%"
-                        previewConfig={{ showPreview: false }}
-                        searchDisabled={window.innerWidth < 640} // Disable search on mobile
-                      />
-                    </div>
-                  </div>
-                </div>
-
                 {/* Name Input */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -940,7 +902,6 @@ export default function Dashboard() {
                           isOpen: false,
                           category: null,
                           name: "",
-                          emoji: "",
                           color: "",
                         })
                       }
@@ -1007,6 +968,51 @@ export default function Dashboard() {
                 batchData={selectedBatchForAnalytics}
                 studentProgress={[]}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Category Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
+          <div className="fixed inset-0 bg-gradient-to-br from-purple-500/30 to-pink-500/30 backdrop-blur-sm" onClick={() => setShowAddModal(false)} />
+          <div className="relative bg-gradient-to-br from-white to-purple-50 rounded-2xl p-4 sm:p-6 shadow-2xl w-full max-w-md mx-4 animate-pop-in overflow-y-auto max-h-[90vh] sm:max-h-[85vh]">
+            <h2 className="text-xl sm:text-2xl font-bold text-center mb-4 sm:mb-6 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">Create New Lesson</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Lesson Name</label>
+                <input
+                  type="text"
+                  placeholder="Enter lesson name"
+                  value={newCategoryName}
+                  onChange={e => setNewCategoryName(e.target.value)}
+                  className="w-full border-2 border-gray-200 rounded-xl px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base focus:outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Lesson Color</label>
+                <input
+                  type="color"
+                  value={selectedColor}
+                  onChange={e => setSelectedColor(e.target.value)}
+                  className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg cursor-pointer border border-gray-200"
+                />
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 mt-6">
+              <button
+                onClick={handleAddCategory}
+                className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold px-4 sm:px-6 py-2 sm:py-3 rounded-xl hover:bg-purple-600 transition-all text-sm sm:text-base"
+              >
+                Create Lesson
+              </button>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="flex-1 bg-white border-2 border-gray-200 text-gray-600 font-semibold px-4 sm:px-6 py-2 sm:py-3 rounded-xl hover:border-purple-300 text-sm sm:text-base"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

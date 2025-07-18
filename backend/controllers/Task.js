@@ -25,14 +25,28 @@ const completeTask = async (req, res) => {
     const { taskId } = req.params;
     const { userId } = req.body; // Expect userId in the request body
 
-    const task = await Task.findByIdAndUpdate(
-      taskId,
-      { $inc: { completedCount: 1 } },
-      { new: true }
-    );
+    const task = await Task.findById(taskId);
     if (!task) {
       return res.status(404).json({ message: "Task not found" });
     }
+
+    // Add userId to completedBy if not already present
+    if (userId && !task.completedBy.includes(userId)) {
+      task.completedBy.push(userId);
+    }
+
+    // Add a record to completionRecords if not already present for today
+    const today = new Date().toDateString();
+    const alreadyRecorded = task.completionRecords.some(
+      rec => String(rec.userId) === String(userId) && new Date(rec.date).toDateString() === today
+    );
+    if (userId && !alreadyRecorded) {
+      task.completionRecords.push({ userId, date: new Date() });
+    }
+
+    // Increment completedCount as before
+    task.completedCount += 1;
+    await task.save();
 
     // Award XPS to the user
     if (userId) {
@@ -69,7 +83,7 @@ const getAllTasksForBatch = async (req, res) => {
 
 async function createTask(req, res) {
   try {
-    const { name, description, details, category, difficulty, assignedTo = [] } = req.body;
+    const { name, description, details, category, difficulty, assignedTo = [], batch } = req.body;
 
     // Step 1: Create the new task
     const task = await Task.create({
@@ -79,6 +93,7 @@ async function createTask(req, res) {
       category,
       difficulty,
       assignedTo,
+      batch,
     });
 
     // Step 2: Push the task reference into the Category model

@@ -12,7 +12,7 @@ export default function BatchCoursePage() {
   const [error, setError] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [categories, setCategories] = useState([]);
-  const [newCategory, setNewCategory] = useState({ name: '', emoji: '📂', color: '#8884d8' });
+  const [newCategory, setNewCategory] = useState({ name: '', color: '#8884d8' });
   const [editCategory, setEditCategory] = useState(null);
   const [categoryModal, setCategoryModal] = useState(false);
   const [categoryLoading, setCategoryLoading] = useState(false);
@@ -52,7 +52,7 @@ export default function BatchCoursePage() {
     setCategoryLoading(true);
     axios.post('http://localhost:3001/api/categories/create', { ...newCategory, batch: id })
       .then(() => {
-        setNewCategory({ name: '', emoji: '📂', color: '#8884d8' });
+        setNewCategory({ name: '', color: '#8884d8' });
         fetchCategories();
       })
       .catch(() => setCategoryLoading(false));
@@ -68,7 +68,6 @@ export default function BatchCoursePage() {
     setCategoryLoading(true);
     axios.patch(`http://localhost:3001/api/categories/edit/${editCategory._id}`, {
       name: editCategory.name,
-      emoji: editCategory.emoji,
       color: editCategory.color
     })
       .then(() => {
@@ -209,19 +208,6 @@ export default function BatchCoursePage() {
                   className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100"
                 />
               </div>
-              {/* Only show Lesson Emoji input if not mentor */}
-              {userDesignation !== 'mentor' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Lesson Emoji</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 📚"
-                    value={newCategory.emoji}
-                    onChange={e => setNewCategory({ ...newCategory, emoji: e.target.value })}
-                    className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-purple-400 focus:ring-4 focus:ring-purple-100"
-                  />
-                </div>
-              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Lesson Color</label>
                 <input
@@ -294,14 +280,7 @@ export default function BatchCoursePage() {
               onChange={e => setEditCategory({ ...editCategory, color: e.target.value })}
               className="w-10 h-10 rounded-lg border mb-2"
             />
-            <input
-              type="text"
-              placeholder="Emoji"
-              value={editCategory.emoji}
-              onChange={e => setEditCategory({ ...editCategory, emoji: e.target.value })}
-              className="w-16 px-2 py-2 border rounded-lg text-center mb-4"
-            />
-                <button
+            <button
               onClick={handleUpdateCategory}
               className="bg-blue-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-600 w-full"
               disabled={categoryLoading}
@@ -351,27 +330,26 @@ function TaskCardModal({ category, batchId, onClose }) {
     // Load completed tasks from localStorage
     const saved = localStorage.getItem(`completedTasks-${category._id}`);
     setCompletedTasks(saved ? JSON.parse(saved) : []);
-  }, [category._id, batchId, isSubmitted]);
+  }, [category._id, batchId]);
 
   const handleFlip = (index) => {
     if (!flippedCards.includes(index)) {
       setFlippedCards([...flippedCards, index]);
-      new Audio("https://assets.mixkit.co/sfx/preview/mixkit-positive-interface-beep-221.mp3").play();
+      // Audio playback removed to prevent NotSupportedError
     }
   };
 
   const handleComplete = (index) => {
     const task = tasks[index];
     if (!task) return;
-    const completedTask = {
-      taskName: task.name,
-      completedAt: new Date().toISOString(),
-    };
-    const previous = JSON.parse(localStorage.getItem(`completedTasks-${category._id}`)) || [];
-    if (previous.some((t) => t.taskName === task.name)) return;
-    const updated = [...previous, completedTask];
-    setCompletedTasks(updated);
-    localStorage.setItem(`completedTasks-${category._id}`, JSON.stringify(updated));
+    setCompletedTasks(prev => {
+      if (prev.some((t) => t.taskName === task.name)) return prev;
+      const updated = [...prev, { taskName: task.name, completedAt: new Date().toISOString() }];
+      localStorage.setItem(`completedTasks-${category._id}`, JSON.stringify(updated));
+      return updated;
+    });
+    // Flip the card back to the front after marking complete
+    setFlippedCards((prev) => prev.filter(i => i !== index));
   };
 
   const handleCreateTask = (e) => {
@@ -452,68 +430,22 @@ function TaskCardModal({ category, batchId, onClose }) {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 px-0 sm:px-2 py-4">
             {tasks.map((task, index) => (
-              <div key={task._id || index} className="relative w-full aspect-[3/4] perspective-1000">
-                {/* Card container */}
-                <motion.div
-                  className={`relative w-full h-full transition-transform duration-500 transform-style-preserve-3d ${flippedCards.includes(index) ? "rotate-y-180" : ""}`}
-                  animate={{
-                    rotateY: flippedCards.includes(index) ? 180 : 0,
-                    scale: 1,
-                  }}
-                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              <div key={task._id || index} className="relative w-full h-[340px] rounded-2xl shadow-2xl bg-gradient-to-br from-white to-gray-50 border-2 border-gray-200 overflow-hidden flex flex-col">
+                <div className="flex-1 flex flex-col justify-between p-6 pb-20">
+                  <div>
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-500 text-white font-bold mb-3">{index + 1}</div>
+                    <h3 className="text-lg md:text-xl font-bold text-gray-800 mb-2">{task.name}</h3>
+                    <p className="text-sm text-gray-600 line-clamp-2">{task.description || "Complete this task to earn rewards!"}</p>
+                  </div>
+                </div>
+                <button
+                  className={`absolute left-0 bottom-0 w-full py-3 font-bold shadow-md transition-all duration-200 rounded-b-2xl ${completedTasks.some((t) => t.taskName === task.name) ? "bg-emerald-500 text-white" : "bg-blue-500 text-white"}`}
+                  style={{ borderRadius: "0 0 1rem 1rem" }}
+                  onClick={() => handleComplete(index)}
+                  disabled={completedTasks.some((t) => t.taskName === task.name)}
                 >
-                  {/* Front of card */}
-                  <motion.div
-                    className={`absolute w-full h-full backface-hidden rounded-2xl p-4 sm:p-6 shadow-2xl bg-gradient-to-br from-white to-gray-50 border-2 border-gray-200`}
-                    whileHover={{ scale: 1.02 }}
-                  >
-                    <div className="h-full flex flex-col justify-between">
-                      <div>
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-500 text-white font-bold mb-3">{index + 1}</div>
-                        <h3 className="text-lg md:text-xl font-bold text-gray-800 mb-2">{task.name}</h3>
-                        <p className="text-sm text-gray-600 line-clamp-2">{task.description || "Complete this task to earn rewards!"}</p>
-                      </div>
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => handleFlip(index)}
-                        disabled={completedTasks.some((t) => t.taskName === task.name)}
-                        className={`mt-4 w-full py-3 rounded-xl font-bold shadow-md ${completedTasks.some((t) => t.taskName === task.name) ? "bg-emerald-500 text-white" : "bg-blue-500 text-white"}`}
-                      >
-                        {completedTasks.some((t) => t.taskName === task.name) ? "Completed ✓" : "View Task"}
-                      </motion.button>
-                    </div>
-                  </motion.div>
-                  {/* Back of card */}
-                  <motion.div
-                    className={`absolute w-full h-full backface-hidden rounded-2xl p-4 sm:p-6 shadow-2xl bg-gradient-to-br from-blue-100 to-cyan-100 border-2 border-blue-300 rotate-y-180`}
-                  >
-                    <div className="h-full flex flex-col">
-                      <h4 className="text-lg font-semibold text-gray-800 mb-2">Task Details</h4>
-                      <p className="text-gray-700 mb-4 flex-grow">{task.details || "Complete this task to learn something new!"}</p>
-                      <div className="flex gap-3 mt-auto">
-                        <motion.button
-                          whileHover={{ scale: 1.03 }}
-                          whileTap={{ scale: 0.97 }}
-                          onClick={() => setFlippedCards(flippedCards.filter(i => i !== index))}
-                          className="flex-1 p-2 bg-white text-gray-800 py-2 rounded-lg font-medium shadow"
-                        >
-                          Back
-                        </motion.button>
-                        {!completedTasks.some((t) => t.taskName === task.name) && (
-                          <motion.button
-                            whileHover={{ scale: 1.03 }}
-                            whileTap={{ scale: 0.97 }}
-                            onClick={() => handleComplete(index)}
-                            className="flex-1 p-2 rounded-lg font-bold shadow-md bg-green-500 text-white"
-                          >
-                            Mark Complete ✓
-                          </motion.button>
-          )}
-        </div>
-      </div>
-                  </motion.div>
-                </motion.div>
+                  {completedTasks.some((t) => t.taskName === task.name) ? "Completed ✓" : "View Task"}
+                </button>
               </div>
             ))}
           </div>

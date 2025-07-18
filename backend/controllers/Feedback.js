@@ -33,7 +33,7 @@ export const getFeedbackByUser = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: 'Failed to fetch feedback', error: error.message });
   }
-};
+}; 
 
 // Get all mentor feedback for a user (no task)
 export const getMentorFeedbackForUser = async (req, res) => {
@@ -84,5 +84,40 @@ export const getStudentSatisfaction = async (req, res) => {
     res.status(200).json({ averageRating: avg.toFixed(2) });
   } catch (error) {
     res.status(500).json({ message: 'Failed to fetch student satisfaction', error: error.message });
+  }
+}; 
+
+export const submitMentorFeedback = async (req, res) => {
+  try {
+    const { userId } = req.params; // toUser
+    const { batch, rating, content, fromUser } = req.body;
+    const feedback = await Feedback.create({
+      fromUser: req.user?.id || fromUser,
+      toUser: userId,
+      batch,
+      rating,
+      content,
+    });
+    res.status(201).json(feedback);
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to submit mentor feedback', error: error.message });
+  }
+};
+
+export const submitTaskFeedback = async (req, res) => {
+  try {
+    const { userId } = req.params; // toUser
+    const { batch, task, rating, content, fromUser } = req.body;
+    const feedback = await Feedback.create({
+      fromUser: req.user?.id || fromUser,
+      toUser: userId,
+      batch,
+      task,
+      rating,
+      content,
+    });
+    res.status(201).json(feedback);
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to submit task feedback', error: error.message });
   }
 }; 

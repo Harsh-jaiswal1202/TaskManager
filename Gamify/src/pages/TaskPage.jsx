@@ -85,11 +85,6 @@ export default function TaskPage() {
   const handleClaimReward = () => {
     // Show the reward popup first
     setShowRewardPopup(true);
-
-    // Play celebration sound effect
-    new Audio(
-      "https://assets.mixkit.co/sfx/preview/mixkit-achievement-bell-600.mp3"
-    ).play();
   };
 
   const handleConfirmReward = () => {
@@ -152,9 +147,12 @@ export default function TaskPage() {
     if (!flippedCards.includes(index)) {
       setFlippedCards([...flippedCards, index]);
       // Play satisfying flip sound (dark pattern: positive audio feedback)
-      new Audio(
-        "https://assets.mixkit.co/sfx/preview/mixkit-positive-interface-beep-221.mp3"
-      ).play();
+      try {
+        const audio = new Audio("https://assets.mixkit.co/sfx/preview/mixkit-positive-interface-beep-221.mp3");
+        audio.play();
+      } catch (e) {
+        console.warn("Audio playback failed:", e);
+      }
     }
   };
 
@@ -175,17 +173,21 @@ export default function TaskPage() {
 
     try {
       const userId = Cookies.get("id");
+      if (!userId) throw new Error("User ID not found. Please log in again.");
       const res = await fetch(
         `http://localhost:3001/api/task/complete/${task._id}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({ userId }),
         }
       );
 
-      if (!res.ok) throw new Error("Failed to update task");
-      console.log("Task completed successfully:", res.data);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to update task");
+      }
       // ✅ Optimistically update UI
       const updated = [...previous, completedTask];
       setCompletedTasks(updated);
@@ -220,6 +222,7 @@ export default function TaskPage() {
       setFeedbackTaskId(task._id);
       setShowFeedbackModal(true);
     } catch (error) {
+      alert(error.message || "Error completing task. Please try again.");
       console.error("Error completing task:", error.message);
     }
   };
@@ -389,7 +392,6 @@ export default function TaskPage() {
           transition={{ delay: 0.2 }}
           className="text-center mb-10"
         >
-          <div className="text-8xl mb-4">{category.emoji}</div>
           <h1
             className={`text-4xl md:text-5xl font-extrabold mb-2 ${colorScheme.text}`}
           >

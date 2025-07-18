@@ -13,6 +13,9 @@ const taskSchema = new mongoose.Schema({
   videoUrl: { type: String }, // URL to the lesson video
   contentType: { type: String, enum: ['video', 'document', 'quiz', 'other'], default: 'video' },
   assignedTo: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // Users assigned to this task
+  completedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // Users who completed this task
+  completionRecords: [{ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, date: Date }], // When each user completed
+  batch: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch' }, // The batch this task belongs to
 });
 
 export default mongoose.model("Task", taskSchema);

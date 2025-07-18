@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import config from '../config.js';
 import Task from '../models/Task.js';
+import UserBatchProgress from '../models/UserBatchProgress.js';
 
 const registerUser = async (req, res) => {
   const { name, email, password, designation, parentId } = req.body;
@@ -308,6 +309,205 @@ const getUserProgressAnalytics = async (req, res) => {
   }
 };
 
+// User Progress Analytics for a specific batch
+const getUserBatchProgressAnalytics = async (req, res) => {
+  try {
+    const { userId, batchId } = req.params;
+    // 1. Get user XP (optionally batch-specific, or just total for now)
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    const xps = user.xps || 0;
+
+    // 2. Get all tasks assigned to user in this batch
+    // Assume Task has a 'batch' field
+    const assignedTasks = await Task.find({ assignedTo: userId, batch: batchId });
+    const tasksAssigned = assignedTasks.length;
+
+    // 3. Get completed tasks in this batch
+    const completedTasks = assignedTasks.filter(task => (task.completedBy || []).includes(userId));
+    const tasksCompleted = completedTasks.length;
+
+    // 4. Calculate streak (consecutive days with at least one completed task in this batch)
+    let currentStreak = 0;
+    if (completedTasks.length > 0) {
+      const dates = [];
+      completedTasks.forEach(task => {
+        if (task.completionRecords) {
+          task.completionRecords.forEach(rec => {
+            if (String(rec.userId) === String(userId)) dates.push(new Date(rec.date));
+          });
+        } else if (task.completedAt) {
+          dates.push(new Date(task.completedAt));
+        }
+      });
+      const uniqueDays = Array.from(new Set(dates.map(d => d.toDateString()))).sort((a, b) => new Date(b) - new Date(a));
+      let streak = 0;
+      let prev = new Date();
+      for (let day of uniqueDays) {
+        const d = new Date(day);
+        if (streak === 0) {
+          if ((new Date().toDateString() === d.toDateString())) {
+            streak = 1;
+          } else {
+            break;
+          }
+        } else {
+          prev.setDate(prev.getDate() - 1);
+          if (prev.toDateString() === d.toDateString()) {
+            streak++;
+          } else {
+            break;
+          }
+        }
+        prev = d;
+      }
+      currentStreak = streak;
+    }
+
+    // 5. Average Score (if available)
+    let averageScore = 0;
+    if (assignedTasks.length > 0) {
+      let total = 0, count = 0;
+      assignedTasks.forEach(task => {
+        if (task.scores && task.scores.length > 0) {
+          const userScore = task.scores.find(s => String(s.userId) === String(userId));
+          if (userScore) {
+            total += userScore.value;
+            count++;
+          }
+        }
+      });
+      if (count > 0) averageScore = Math.round(total / count);
+    }
+
+    // 6. Tasks completed over time (for chart)
+    const completedOverTime = {};
+    completedTasks.forEach(task => {
+      if (task.completionRecords) {
+        task.completionRecords.forEach(rec => {
+          if (String(rec.userId) === String(userId)) {
+            const day = new Date(rec.date).toLocaleDateString();
+            completedOverTime[day] = (completedOverTime[day] || 0) + 1;
+          }
+        });
+      } else if (task.completedAt) {
+        const day = new Date(task.completedAt).toLocaleDateString();
+        completedOverTime[day] = (completedOverTime[day] || 0) + 1;
+      }
+    });
+
+    // --- New fields for overview ---
+    // 1. Learning Summary (placeholder)
+    const learningSummary = "You’ve completed the foundational modules of this batch. You've demonstrated strong engagement in key topics, and your skills have steadily improved.";
+
+    // 2. Skills Acquired (placeholder)
+    const skillsAcquired = [
+      "Built responsive layouts using Flexbox and Grid.",
+      "Developed dynamic UIs with state management in React.",
+      "Integrated backend APIs using Express.js."
+    ];
+
+    // 3. Mentor Feedback Summary (fetch latest mentor feedback for this user in this batch, or placeholder)
+    let mentorFeedbackSummary = "No mentor feedback yet.";
+    try {
+      const Feedback = (await import('../models/Feedback.js')).default;
+      const feedback = await Feedback.findOne({ toUser: userId, batch: batchId }).sort({ createdAt: -1 });
+      if (feedback && feedback.content) {
+        mentorFeedbackSummary = feedback.content;
+      }
+    } catch (e) {}
+
+    // 4. Most Engaged Topics (placeholder)
+    const engagedTopics = [
+      { topic: "Authentication", reason: "Spent extra time, deep interest or initial difficulty" },
+      { topic: "React Hooks", reason: "Quickly mastered advanced concepts" }
+    ];
+
+    // 5. Mood Tracker (placeholder)
+    const moodTracker = [
+      { date: "2024-05-01", mood: "Confident", context: "JavaScript lessons" },
+      { date: "2024-05-02", mood: "Challenged", context: "Backend integration" }
+    ];
+
+    res.json({
+      xps,
+      tasksAssigned,
+      tasksCompleted,
+      currentStreak,
+      averageScore,
+      completedOverTime,
+      learningSummary,
+      skillsAcquired,
+      mentorFeedbackSummary,
+      engagedTopics,
+      moodTracker,
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch user batch progress analytics', error: err.message });
+  }
+};
+
+// PATCH /api/user/:userId/progress/batch/:batchId/summary
+const updateUserBatchLearningSummary = async (req, res) => {
+  try {
+    const { userId, batchId } = req.params;
+    const { learningSummary } = req.body;
+    const progress = await UserBatchProgress.findOneAndUpdate(
+      { userId, batchId },
+      { $set: { learningSummary } },
+      { upsert: true, new: true }
+    );
+    res.json(progress);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to update learning summary', error: err.message });
+  }
+};
+// PATCH /api/user/:userId/progress/batch/:batchId/skills
+const updateUserBatchSkills = async (req, res) => {
+  try {
+    const { userId, batchId } = req.params;
+    const { skillsAcquired } = req.body;
+    const progress = await UserBatchProgress.findOneAndUpdate(
+      { userId, batchId },
+      { $set: { skillsAcquired } },
+      { upsert: true, new: true }
+    );
+    res.json(progress);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to update skills', error: err.message });
+  }
+};
+// PATCH /api/user/:userId/progress/batch/:batchId/topics
+const updateUserBatchTopics = async (req, res) => {
+  try {
+    const { userId, batchId } = req.params;
+    const { engagedTopics } = req.body;
+    const progress = await UserBatchProgress.findOneAndUpdate(
+      { userId, batchId },
+      { $set: { engagedTopics } },
+      { upsert: true, new: true }
+    );
+    res.json(progress);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to update topics', error: err.message });
+  }
+};
+// PATCH /api/user/:userId/progress/batch/:batchId/mood
+const updateUserBatchMood = async (req, res) => {
+  try {
+    const { userId, batchId } = req.params;
+    const { moodTracker } = req.body;
+    const progress = await UserBatchProgress.findOneAndUpdate(
+      { userId, batchId },
+      { $set: { moodTracker } },
+      { upsert: true, new: true }
+    );
+    res.json(progress);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to update mood tracker', error: err.message });
+  }
+};
+
 // JWT auth middleware
 const authenticateJWT = (req, res, next) => {
   // Try to get token from cookies first, then from Authorization header
@@ -430,4 +630,4 @@ const deleteAccount = async (req, res) => {
   }
 };
 
-export  { registerUser, loginUser, getAllUsers, toggleAdminRestriction, authenticateJWT, toggleUserRestriction, toggleMentorRestriction, getUserById, updateUser, updatePassword, updateEmail, deleteAccount, getUserProgressAnalytics };
+export  { registerUser, loginUser, getAllUsers, toggleAdminRestriction, authenticateJWT, toggleUserRestriction, toggleMentorRestriction, getUserById, updateUser, updatePassword, updateEmail, deleteAccount, getUserProgressAnalytics, getUserBatchProgressAnalytics, updateUserBatchLearningSummary, updateUserBatchSkills, updateUserBatchTopics, updateUserBatchMood };

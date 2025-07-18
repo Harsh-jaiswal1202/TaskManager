@@ -6,6 +6,7 @@ import { FaSignOutAlt, FaChevronDown, FaUserCircle, FaPlus, FaTrash, FaCamera } 
 import Cookies from "js-cookie";
 import axios from "axios";
 import PortalDropdown from "../components/PortalDropdown";
+import FeedbackModal from '../components/FeedbackModal';
 
 export default function Dashboard() {
   const { points } = usePoints();
@@ -46,6 +47,9 @@ export default function Dashboard() {
   // Add a loading state for avatar deletion
   const [avatarDeleting, setAvatarDeleting] = useState(false);
   const [xps, setXps] = useState(0);
+  const [showMentorFeedbackModal, setShowMentorFeedbackModal] = useState(false);
+  const [taskFeedbackModal, setTaskFeedbackModal] = useState({ open: false, task: null });
+  const [completedTasks, setCompletedTasks] = useState([]);
 
   useEffect(() => {
     if (showBatchDropdown && batchesBtnRef.current) {
@@ -152,6 +156,21 @@ export default function Dashboard() {
       setProfileEditMode(false); // Always start in view mode
     }
   }, [activePage, userId]);
+
+  useEffect(() => {
+    // Fetch completed tasks from localStorage (or backend if available)
+    const allTasks = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key.startsWith('completedTasks-')) {
+        try {
+          const tasks = JSON.parse(localStorage.getItem(key));
+          if (Array.isArray(tasks)) allTasks.push(...tasks);
+        } catch {}
+      }
+    }
+    setCompletedTasks(allTasks);
+  }, []);
 
   const fetchMyBatches = () => {
     setBatchLoading(true);

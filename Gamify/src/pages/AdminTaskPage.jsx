@@ -300,10 +300,6 @@ export default function TaskPage() {
   const handleFlip = (index) => {
     if (!flippedCards.includes(index)) {
       setFlippedCards([...flippedCards, index]);
-      // Play satisfying flip sound (dark pattern: positive audio feedback)
-      new Audio(
-        "https://assets.mixkit.co/sfx/preview/mixkit-positive-interface-beep-221.mp3"
-      ).play();
     }
   };
 
@@ -481,7 +477,6 @@ export default function TaskPage() {
                 transition={{ delay: 0.2 }}
                 className="text-center mb-10"
               >
-                <div className="text-8xl mb-4">{category.emoji}</div>
                 <h1
                   className={`text-4xl md:text-5xl font-extrabold mb-2 ${colorScheme.text}`}
                 >

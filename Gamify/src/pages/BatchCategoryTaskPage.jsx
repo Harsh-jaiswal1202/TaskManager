@@ -5,6 +5,7 @@ import axios from "axios";
 import Cookies from "js-cookie";
 import EnhancedTaskModal from '../components/EnhancedTaskModal';
 import { FaTrash } from 'react-icons/fa';
+import FeedbackModal from '../components/FeedbackModal';
 
 const difficultyOptions = ["Easy", "Medium", "Hard", "Popular", "Trending"];
 
@@ -29,6 +30,9 @@ export default function BatchCategoryTaskPage() {
   const [users, setUsers] = useState([]);
   const [modalLoading, setModalLoading] = useState(false);
   const [modalError, setModalError] = useState('');
+  const [showMentorFeedbackModal, setShowMentorFeedbackModal] = useState(false);
+  const [taskFeedbackModal, setTaskFeedbackModal] = useState({ open: false, task: null });
+  const [adminInfo, setAdminInfo] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -50,27 +54,38 @@ export default function BatchCategoryTaskPage() {
         .then(res => setUsers(res.data.users || []))
         .catch(() => setUsers([]));
     }
-  }, [userDesignation]);
+    // Fetch mentor/admin info for feedback
+    const userId = Cookies.get('id');
+    if (userId) {
+      axios.get(`http://localhost:3001/api/user/${userId}`)
+        .then(res => {
+          const user = res.data;
+          if (user && user.parentId) {
+            axios.get(`http://localhost:3001/api/user/${user.parentId}`)
+              .then(res2 => setAdminInfo(res2.data))
+              .catch(() => setAdminInfo(null));
+          }
+        })
+        .catch(() => setAdminInfo(null));
+    }
+  }, [categoryId, batchId]);
 
   const handleFlip = (index) => {
     if (!flippedCards.includes(index)) {
       setFlippedCards([...flippedCards, index]);
-      new Audio("https://assets.mixkit.co/sfx/preview/mixkit-positive-interface-beep-221.mp3").play();
     }
   };
 
-  const handleComplete = (index) => {
+  const handleComplete = async (index) => {
     const task = tasks[index];
     if (!task) return;
-    const completedTask = {
-      taskName: task.name,
-      completedAt: new Date().toISOString(),
-    };
-    const previous = JSON.parse(localStorage.getItem(`completedTasks-${categoryId}`)) || [];
-    if (previous.some((t) => t.taskName === task.name)) return;
-    const updated = [...previous, completedTask];
-    setCompletedTasks(updated);
-    localStorage.setItem(`completedTasks-${categoryId}`, JSON.stringify(updated));
+    const userId = Cookies.get('id');
+    try {
+      await axios.post(`http://localhost:3001/api/tasks/complete/${task._id}`, { userId });
+      setIsSubmitted(s => !s); // trigger reload
+    } catch (err) {
+      alert("Failed to mark task as complete.");
+    }
   };
 
   const handleOpenCreateModal = () => {
@@ -130,7 +145,6 @@ export default function BatchCategoryTaskPage() {
         ← Back
       </button>
       <div className="text-center mb-6">
-        <div className="text-6xl mb-2" style={{ color: category.color }}>{category.emoji}</div>
         <h2 className="text-3xl font-bold mb-1" style={{ color: category.color }}>{category.name}</h2>
       </div>
       {/* Task Creation UI for admins/mentors */}
