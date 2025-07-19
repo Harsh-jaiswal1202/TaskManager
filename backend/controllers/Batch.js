@@ -293,4 +293,200 @@ export const getBatchById = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: 'Failed to fetch batch', error: error.message });
   }
+};
+
+// --- ADMIN BATCH ANALYTICS ---
+// Returns enrollment, completion, engagement, and performance analytics for a batch (admin dashboard)
+export const getAdminBatchAnalytics = async (req, res) => {
+  try {
+    const { id } = req.params;
+    // Only admin or superadmin can access
+    if (!req.user || (req.user.designation !== 'admin' && req.user.designation !== 'superadmin')) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+    // Fetch batch with users and tasks
+    const batch = await Batch.findById(id)
+      .populate({ path: 'users', select: 'username completedTasks inProgressTasks designation' })
+      .populate({ path: 'tasks' });
+    if (!batch) return res.status(404).json({ message: 'Batch not found' });
+    // ENROLLMENT & COMPLETION
+    const enrollmentOverTime = batch.users.map(u => {
+      // Simulate enrollment date as earliest completed/inProgress task (for demo)
+      let dates = [];
+      if (u.completedTasks) dates = dates.concat(u.completedTasks.map(t => t.completedAt));
+      if (u.inProgressTasks) dates = dates.concat(u.inProgressTasks.map(t => t.startedAt));
+      dates = dates.filter(Boolean).sort();
+      return { user: u.username, date: dates[0] || null };
+    }).filter(e => e.date);
+    // Group by date
+    const enrollmentByDay = {};
+    enrollmentOverTime.forEach(e => {
+      const d = new Date(e.date).toISOString().slice(0, 10);
+      enrollmentByDay[d] = (enrollmentByDay[d] || 0) + 1;
+    });
+    const enrollmentOverTimeArr = Object.entries(enrollmentByDay).map(([date, count]) => ({ date, count }));
+    const totalEnrolled = batch.users.length;
+    // Completion rate
+    const completedUsers = batch.users.filter(u => {
+      const completedTaskIds = (u.completedTasks || []).map(t => t.task?.toString());
+      return batch.tasks.every(task => completedTaskIds.includes(task._id.toString()));
+    });
+    const completionRate = totalEnrolled === 0 ? 0 : completedUsers.length / totalEnrolled;
+    // Course progress distribution
+    const courseProgressDistribution = [0, 0, 0, 0]; // 0-25, 26-50, 51-75, 76-100
+    batch.users.forEach(u => {
+      const completedTaskIds = (u.completedTasks || []).map(t => t.task?.toString());
+      const percent = batch.tasks.length === 0 ? 0 : (completedTaskIds.length / batch.tasks.length) * 100;
+      if (percent <= 25) courseProgressDistribution[0]++;
+      else if (percent <= 50) courseProgressDistribution[1]++;
+      else if (percent <= 75) courseProgressDistribution[2]++;
+      else courseProgressDistribution[3]++;
+    });
+    // Average time to completion
+    let totalTime = 0, completedCount = 0;
+    batch.users.forEach(u => {
+      const completedTaskRecords = (u.completedTasks || []).filter(t => t.completedAt);
+      if (completedTaskRecords.length === batch.tasks.length && batch.tasks.length > 0) {
+        const times = completedTaskRecords.map(t => t.completedAt).sort();
+        const start = new Date(times[0]);
+        const end = new Date(times[times.length - 1]);
+        totalTime += (end - start);
+        completedCount++;
+      }
+    });
+    const avgTimeMs = completedCount === 0 ? 0 : totalTime / completedCount;
+    const avgTimeDays = avgTimeMs ? Math.round(avgTimeMs / (1000 * 60 * 60 * 24)) : 0;
+    // ENGAGEMENT & INTERACTION (mocked for now)
+    const userActivity = enrollmentOverTimeArr.map(e => ({ date: e.date, activeUsers: Math.floor(Math.random() * totalEnrolled) }));
+    const contentInteraction = batch.tasks.map(t => ({ type: t.contentType, title: t.name, views: Math.floor(Math.random() * 100) }));
+    const forum = { posts: Math.floor(Math.random() * 100), replies: Math.floor(Math.random() * 200), activeThreads: Math.floor(Math.random() * 10) };
+    const mentorInteraction = { messages: Math.floor(Math.random() * 50), qaSessions: Math.floor(Math.random() * 10), averageRating: 4.5 };
+    // PERFORMANCE & ASSESSMENT (mocked for now)
+    const quizScores = batch.tasks.filter(t => t.contentType === 'quiz').map(t => ({ quiz: t.name, averageScore: Math.floor(Math.random() * 100) }));
+    const assignmentScores = batch.tasks.filter(t => t.contentType === 'assignment').map(t => ({ assignment: t.name, averageScore: Math.floor(Math.random() * 100) }));
+    const userProgress = batch.users.map(u => {
+      const completedTaskIds = (u.completedTasks || []).map(t => t.task?.toString());
+      return {
+        userId: u._id,
+        name: u.username,
+        progress: batch.tasks.length === 0 ? 0 : Math.round((completedTaskIds.length / batch.tasks.length) * 100),
+        score: Math.floor(Math.random() * 100),
+        completed: completedTaskIds.length === batch.tasks.length
+      };
+    });
+    const dropOffPoints = batch.tasks.map((t, i) => ({ module: t.name, dropOffCount: Math.floor(Math.random() * 5) }));
+    // RESPONSE
+    res.json({
+      enrollment: {
+        enrollmentOverTime: enrollmentOverTimeArr,
+        totalEnrolled,
+        completionRate,
+        courseProgressDistribution: [
+          { range: '0-25%', count: courseProgressDistribution[0] },
+          { range: '26-50%', count: courseProgressDistribution[1] },
+          { range: '51-75%', count: courseProgressDistribution[2] },
+          { range: '76-100%', count: courseProgressDistribution[3] }
+        ],
+        averageTimeToCompletion: avgTimeDays + ' days'
+      },
+      engagement: {
+        userActivity,
+        contentInteraction,
+        forum,
+        mentorInteraction
+      },
+      performance: {
+        quizScores,
+        assignmentScores,
+        userProgress,
+        dropOffPoints
+      }
+    });
+  } catch (error) {
+    console.error('Admin batch analytics error:', error);
+    res.status(500).json({ message: 'Failed to fetch admin batch analytics', error: error.message });
+  }
+};
+
+// --- MENTOR BATCH ANALYTICS ---
+// Returns student progress, engagement, and task management analytics for a batch (mentor dashboard)
+export const getMentorBatchAnalytics = async (req, res) => {
+  try {
+    const { id } = req.params;
+    // Only mentor or superadmin can access
+    if (!req.user || (req.user.designation !== 'mentor' && req.user.designation !== 'superadmin')) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+    // Fetch batch with users and tasks
+    const batch = await Batch.findById(id)
+      .populate({ path: 'users', select: 'username email completedTasks inProgressTasks designation' })
+      .populate({ path: 'tasks' });
+    if (!batch) return res.status(404).json({ message: 'Batch not found' });
+    // --- Student Progress ---
+    const students = batch.users.map(u => {
+      const completedTasks = (u.completedTasks || []).map(t => t.task?.toString());
+      const completedLessons = batch.tasks.filter(t => completedTasks.includes(t._id.toString()));
+      return {
+        _id: u._id,
+        name: u.username,
+        email: u.email,
+        progress: batch.tasks.length === 0 ? 0 : Math.round((completedLessons.length / batch.tasks.length) * 100),
+        completedLessons,
+        quizScores: batch.tasks.filter(t => t.contentType === 'quiz').map(q => ({ quiz: q.name, score: Math.floor(Math.random() * 100) })),
+        submittedTasks: completedLessons
+      };
+    });
+    // Quiz/Assignment Analytics
+    const quizzes = batch.tasks.filter(t => t.contentType === 'quiz').map(q => ({
+      name: q.name,
+      averageScore: Math.floor(Math.random() * 100),
+      difficultQuestions: ["Q2", "Q5"].slice(0, Math.floor(Math.random() * 2))
+    }));
+    // Progress Comparison
+    const avgProgress = students.length === 0 ? 0 : students.reduce((a, b) => a + b.progress, 0) / students.length;
+    students.forEach(s => s.batchAvg = Math.round(avgProgress));
+    // --- Engagement & Communication ---
+    const batchActivity = students.flatMap(s => [
+      { student: s.name, action: 'completed a lesson', time: '2h ago' },
+      { student: s.name, action: 'submitted a task', time: '1h ago' }
+    ]);
+    const engagement = students.map(s => ({
+      studentId: s._id,
+      student: s.name,
+      level: s.progress > 70 ? 'High' : s.progress > 40 ? 'Medium' : 'Low'
+    }));
+    const qna = [
+      { student: students[0]?.name || 'Student', question: 'How do I solve Q3?', answered: false },
+      { student: students[1]?.name || 'Student', question: 'Can you explain topic X?', answered: true }
+    ];
+    // --- Task Management ---
+    const lessons = batch.tasks.map(t => ({
+      lesson: t.name,
+      completionRate: Math.floor(Math.random() * 100),
+      avgTime: Math.floor(Math.random() * 60),
+      feedback: ''
+    }));
+    const submissions = batch.tasks.map(t => ({
+      taskId: t._id,
+      task: t.name,
+      status: ['Not Started', 'In Progress', 'Submitted', 'Graded'][Math.floor(Math.random() * 4)],
+      submitted: Math.floor(Math.random() * students.length),
+      graded: Math.floor(Math.random() * students.length),
+      student: students[Math.floor(Math.random() * students.length)]?.name || '',
+      feedback: Math.random() > 0.5 ? 'Great job!' : ''
+    }));
+    res.json({
+      students,
+      quizzes,
+      assignments: quizzes,
+      batchActivity,
+      engagement,
+      qna,
+      lessons,
+      submissions
+    });
+  } catch (error) {
+    console.error('Mentor batch analytics error:', error);
+    res.status(500).json({ message: 'Failed to fetch mentor batch analytics', error: error.message });
+  }
 }; 

@@ -18,7 +18,7 @@ import {
 import Cookies from 'js-cookie';
 import axios from 'axios';
 
-export default function BatchAnalytics({ batchData, studentProgress }) {
+export default function BatchAnalytics({ batchData, studentProgress, mode }) {
   if (!batchData || !batchData._id) {
     return <div className="text-red-600 p-8">Batch data not loaded. Please try again or contact support.</div>;
   }
@@ -64,6 +64,18 @@ export default function BatchAnalytics({ batchData, studentProgress }) {
   const [feedbackText, setFeedbackText] = useState("");
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [feedbackToast, setFeedbackToast] = useState("");
+
+  // --- ADMIN ANALYTICS STATE ---
+  const [adminAnalytics, setAdminAnalytics] = useState(null);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState("");
+
+  // --- MENTOR ANALYTICS STATE ---
+  const [mentorAnalytics, setMentorAnalytics] = useState(null);
+  const [mentorLoading, setMentorLoading] = useState(false);
+  const [mentorError, setMentorError] = useState("");
+  const [mentorSection, setMentorSection] = useState('studentProgress');
+  const [selectedStudent, setSelectedStudent] = useState(null);
 
   useEffect(() => {
     const userId = Cookies.get('id');
@@ -123,6 +135,38 @@ export default function BatchAnalytics({ batchData, studentProgress }) {
         setMoodTracker([]);
       });
   }, [batchData]);
+
+  useEffect(() => {
+    if (mode === 'admin' && batchData?._id) {
+      setAdminLoading(true);
+      setAdminError("");
+      axios.get(`http://localhost:3001/api/batches/${batchData._id}/analytics/admin`, { withCredentials: true })
+        .then(res => {
+          setAdminAnalytics(res.data);
+          setAdminLoading(false);
+        })
+        .catch(err => {
+          setAdminError('Failed to load admin analytics.');
+          setAdminLoading(false);
+        });
+    }
+  }, [mode, batchData?._id]);
+
+  useEffect(() => {
+    if (mode === 'mentor' && batchData?._id) {
+      setMentorLoading(true);
+      setMentorError("");
+      axios.get(`http://localhost:3001/api/batches/${batchData._id}/analytics/mentor`, { withCredentials: true })
+        .then(res => {
+          setMentorAnalytics(res.data);
+          setMentorLoading(false);
+        })
+        .catch(err => {
+          setMentorError('Failed to load mentor analytics.');
+          setMentorLoading(false);
+        });
+    }
+  }, [mode, batchData?._id]);
 
   // For chart: show progress over time (mock)
   // Animated counter helper
@@ -725,6 +769,422 @@ export default function BatchAnalytics({ batchData, studentProgress }) {
       </div>
     );
   };
+
+  // --- ADMIN ANALYTICS RENDER ---
+  const [adminSection, setAdminSection] = useState('enrollment');
+  const renderAdminAnalytics = () => {
+    if (adminLoading) return <div className="p-8 text-lg">Loading analytics...</div>;
+    if (adminError) return <div className="p-8 text-red-600">{adminError}</div>;
+    if (!adminAnalytics) return null;
+    const { enrollment, engagement, performance } = adminAnalytics;
+    return (
+      <div className="space-y-8">
+        {/* Section Buttons */}
+        <div className="flex gap-2 mb-4">
+          <button onClick={() => setAdminSection('enrollment')} className={`px-4 py-2 rounded-lg font-semibold transition-all flex items-center gap-2 ${adminSection === 'enrollment' ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}><FaUsers /> Enrollment & Completion</button>
+          <button onClick={() => setAdminSection('engagement')} className={`px-4 py-2 rounded-lg font-semibold transition-all flex items-center gap-2 ${adminSection === 'engagement' ? 'bg-pink-600 text-white' : 'bg-pink-100 text-pink-700 hover:bg-pink-200'}`}><FaFire /> Engagement & Interaction</button>
+          <button onClick={() => setAdminSection('performance')} className={`px-4 py-2 rounded-lg font-semibold transition-all flex items-center gap-2 ${adminSection === 'performance' ? 'bg-green-600 text-white' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}><FaTrophy /> Performance & Assessment</button>
+        </div>
+        {/* Section Content */}
+        {adminSection === 'enrollment' && (
+          <section className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-2xl font-bold mb-4 text-blue-700 flex items-center gap-2"><FaUsers /> Enrollment & Completion</h2>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+              <div className="bg-blue-50 rounded-lg p-4 text-center">
+                <div className="text-3xl font-bold text-blue-600">{enrollment.totalEnrolled}</div>
+                <div className="text-gray-600 mt-1">Total Enrolled</div>
+              </div>
+              <div className="bg-green-50 rounded-lg p-4 text-center">
+                <div className="text-3xl font-bold text-green-600">{Math.round(enrollment.completionRate * 100)}%</div>
+                <div className="text-gray-600 mt-1">Completion Rate</div>
+              </div>
+              <div className="bg-yellow-50 rounded-lg p-4 text-center">
+                <div className="text-2xl font-bold text-yellow-600">{enrollment.averageTimeToCompletion}</div>
+                <div className="text-gray-600 mt-1">Avg. Time to Completion</div>
+              </div>
+              <div className="bg-purple-50 rounded-lg p-4 text-center">
+                <div className="text-2xl font-bold text-purple-600">Progress</div>
+                <div className="flex flex-col gap-1 mt-2">
+                  {enrollment.courseProgressDistribution.map((d, i) => (
+                    <div key={i} className="flex justify-between text-sm">
+                      <span>{d.range}</span>
+                      <span>{d.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            {/* Enrollment Over Time Chart */}
+            <div className="mt-6">
+              <h4 className="font-semibold mb-2">Enrollment Over Time</h4>
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={enrollment.enrollmentOverTime} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="count" stroke="#6366f1" strokeWidth={3} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
+        )}
+        {adminSection === 'engagement' && (
+          <section className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-2xl font-bold mb-4 text-pink-700 flex items-center gap-2"><FaFire /> Engagement & Interaction</h2>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+              <div className="bg-pink-50 rounded-lg p-4 text-center">
+                <div className="text-3xl font-bold text-pink-600">{engagement.userActivity.reduce((max, d) => Math.max(max, d.activeUsers), 0)}</div>
+                <div className="text-gray-600 mt-1">Peak Active Users</div>
+              </div>
+              <div className="bg-orange-50 rounded-lg p-4 text-center">
+                <div className="text-3xl font-bold text-orange-600">{engagement.contentInteraction.length}</div>
+                <div className="text-gray-600 mt-1">Content Items</div>
+              </div>
+              <div className="bg-green-50 rounded-lg p-4 text-center">
+                <div className="text-3xl font-bold text-green-600">{engagement.forum.posts}</div>
+                <div className="text-gray-600 mt-1">Forum Posts</div>
+              </div>
+              <div className="bg-blue-50 rounded-lg p-4 text-center">
+                <div className="text-3xl font-bold text-blue-600">{engagement.mentorInteraction.messages}</div>
+                <div className="text-gray-600 mt-1">Mentor Messages</div>
+              </div>
+            </div>
+            {/* User Activity Chart */}
+            <div className="mt-6">
+              <h4 className="font-semibold mb-2">User Activity (Daily)</h4>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={engagement.userActivity} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="activeUsers" fill="#f472b6" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            {/* Content Interaction Chart */}
+            <div className="mt-6">
+              <h4 className="font-semibold mb-2">Content Interaction</h4>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={engagement.contentInteraction} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="title" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="views" fill="#fb923c" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
+        )}
+        {adminSection === 'performance' && (
+          <section className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-2xl font-bold mb-4 text-green-700 flex items-center gap-2"><FaTrophy /> Performance & Assessment</h2>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+              <div className="bg-green-50 rounded-lg p-4 text-center">
+                <div className="text-3xl font-bold text-green-600">{performance.quizScores.length}</div>
+                <div className="text-gray-600 mt-1">Quizzes</div>
+              </div>
+              <div className="bg-yellow-50 rounded-lg p-4 text-center">
+                <div className="text-3xl font-bold text-yellow-600">{performance.assignmentScores.length}</div>
+                <div className="text-gray-600 mt-1">Assignments</div>
+              </div>
+              <div className="bg-blue-50 rounded-lg p-4 text-center">
+                <div className="text-3xl font-bold text-blue-600">{performance.userProgress.length}</div>
+                <div className="text-gray-600 mt-1">Users</div>
+              </div>
+              <div className="bg-pink-50 rounded-lg p-4 text-center">
+                <div className="text-3xl font-bold text-pink-600">{performance.dropOffPoints.length}</div>
+                <div className="text-gray-600 mt-1">Drop-off Points</div>
+              </div>
+            </div>
+            {/* Quiz Scores Chart */}
+            <div className="mt-6">
+              <h4 className="font-semibold mb-2">Quiz Scores</h4>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={performance.quizScores} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="quiz" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="averageScore" fill="#34d399" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            {/* User Progress Table */}
+            <div className="mt-6 overflow-x-auto">
+              <h4 className="font-semibold mb-2">Individual User Progress</h4>
+              <table className="min-w-full bg-white border rounded-lg table-fixed">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-2 border-b align-middle text-left">User</th>
+                    <th className="px-4 py-2 border-b align-middle text-center">Progress</th>
+                    <th className="px-4 py-2 border-b align-middle text-center">Score</th>
+                    <th className="px-4 py-2 border-b align-middle text-center">Completed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {performance.userProgress.map((u, i) => (
+                    <tr key={u.userId} className={i % 2 === 0 ? 'bg-gray-50' : ''}>
+                      <td className="px-4 py-2 border-b align-middle text-left">{u.name}</td>
+                      <td className="px-4 py-2 border-b align-middle">
+                        <div className="flex items-center justify-center gap-2 w-full">
+                          <div className="w-32 min-w-[6rem] max-w-[8rem] bg-gray-200 rounded-full h-3 overflow-hidden">
+                            <div className="h-3 rounded-full bg-blue-500" style={{ width: `${u.progress}%` }} />
+                          </div>
+                          <span className="ml-2 text-sm whitespace-nowrap">{u.progress}%</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 border-b align-middle text-center">{u.score}</td>
+                      <td className="px-4 py-2 border-b align-middle text-center">{u.completed ? <span className="text-green-600 font-bold">Yes</span> : <span className="text-gray-400">No</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Drop-off Points Chart */}
+            <div className="mt-6">
+              <h4 className="font-semibold mb-2">Drop-off Points</h4>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={performance.dropOffPoints} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="module" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="dropOffCount" fill="#f472b6" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
+        )}
+      </div>
+    );
+  };
+
+  // --- MENTOR ANALYTICS RENDER ---
+  const renderMentorAnalytics = () => {
+    if (mentorLoading) return <div className="p-8 text-lg">Loading analytics...</div>;
+    if (mentorError) return <div className="p-8 text-red-600">{mentorError}</div>;
+    if (!mentorAnalytics) return null;
+    const { students, quizzes, assignments, batchActivity, engagement, qna, lessons, submissions } = mentorAnalytics;
+    return (
+      <div className="space-y-8">
+        {/* Section Buttons */}
+        <div className="flex gap-2 mb-4">
+          <button onClick={() => setMentorSection('studentProgress')} className={`px-4 py-2 rounded-lg font-semibold transition-all flex items-center gap-2 ${mentorSection === 'studentProgress' ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}>Student Progress</button>
+          <button onClick={() => setMentorSection('engagement')} className={`px-4 py-2 rounded-lg font-semibold transition-all flex items-center gap-2 ${mentorSection === 'engagement' ? 'bg-pink-600 text-white' : 'bg-pink-100 text-pink-700 hover:bg-pink-200'}`}>Engagement & Communication</button>
+          <button onClick={() => setMentorSection('taskManagement')} className={`px-4 py-2 rounded-lg font-semibold transition-all flex items-center gap-2 ${mentorSection === 'taskManagement' ? 'bg-green-600 text-white' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}>Task Management</button>
+        </div>
+        {/* Section Content */}
+        {mentorSection === 'studentProgress' && (
+          <section className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-2xl font-bold mb-4 text-blue-700">Student Progress</h2>
+            {/* Student List */}
+            <div className="mb-6">
+              <h3 className="font-semibold mb-2">Students</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {students.map(student => (
+                  <div key={student._id} className={`p-4 rounded-lg shadow cursor-pointer border ${selectedStudent && selectedStudent._id === student._id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-gray-50'}`} onClick={() => setSelectedStudent(student)}>
+                    <div className="font-bold text-blue-700">{student.name}</div>
+                    <div className="text-sm text-gray-600">{student.email}</div>
+                    <div className="text-xs text-gray-500 mt-1">Progress: {student.progress}%</div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                      <div className="h-2 rounded-full bg-blue-500" style={{ width: `${student.progress}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Student Profile */}
+            {selectedStudent && (
+              <div className="mt-6 p-6 rounded-xl bg-gradient-to-r from-blue-100 to-purple-100 shadow-lg">
+                <h4 className="text-lg font-bold mb-2">{selectedStudent.name}'s Profile</h4>
+                <div className="mb-2">Email: <span className="font-mono">{selectedStudent.email}</span></div>
+                <div className="mb-2">Progress: <span className="font-semibold">{selectedStudent.progress}%</span></div>
+                <div className="mb-2">Completed Lessons: {selectedStudent.completedLessons.length}</div>
+                <div className="mb-2">Quiz Scores:</div>
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={selectedStudent.quizScores} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="quiz" />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Bar dataKey="score" fill="#6366f1" />
+                  </BarChart>
+                </ResponsiveContainer>
+                <div className="mt-4">Submitted Tasks: {selectedStudent.submittedTasks.length}</div>
+              </div>
+            )}
+            {/* Quiz/Assignment Analytics */}
+            <div className="mt-8">
+              <h4 className="font-semibold mb-2">Quiz/Assignment Analytics</h4>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={quizzes} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="averageScore" fill="#34d399" />
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="mt-4">{quizzes.map(q => (
+                <div key={q.name} className="mb-2">
+                  <span className="font-semibold">{q.name}:</span> Avg: {q.averageScore}, Difficult Qs: {q.difficultQuestions.join(', ') || 'None'}
+                </div>
+              ))}</div>
+            </div>
+            {/* Progress Comparison */}
+            <div className="mt-8">
+              <h4 className="font-semibold mb-2">Progress Comparison</h4>
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={students.map(s => ({ name: s.name, progress: s.progress, batchAvg: s.batchAvg }))}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="progress" fill="#6366f1" />
+                  <Bar dataKey="batchAvg" fill="#fbbf24" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
+        )}
+        {mentorSection === 'engagement' && (
+          <section className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-2xl font-bold mb-4 text-pink-700">Engagement & Communication</h2>
+            {/* Batch Activity Feed */}
+            <div className="mb-6">
+              <h3 className="font-semibold mb-2">Batch Activity Feed</h3>
+              <div className="bg-gray-50 rounded-lg p-4 max-h-60 overflow-y-auto">
+                {batchActivity.map((a, i) => (
+                  <div key={i} className="mb-2 text-sm text-gray-700">
+                    <span className="font-bold text-blue-600">{a.student}</span> {a.action} <span className="text-gray-500">({a.time})</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Student Engagement Level */}
+            <div className="mb-6">
+              <h3 className="font-semibold mb-2">Student Engagement Level</h3>
+              <table className="min-w-full bg-white border rounded-lg">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-2 border-b align-middle text-left">Student</th>
+                    <th className="px-4 py-2 border-b align-middle text-center">Engagement</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {engagement.map((e, i) => (
+                    <tr key={e.studentId} className={i % 2 === 0 ? 'bg-gray-50' : ''}>
+                      <td className="px-4 py-2 border-b align-middle text-left">{e.student}</td>
+                      <td className="px-4 py-2 border-b align-middle text-center font-bold">
+                        <span className={
+                          e.level === 'High' ? 'text-green-600' :
+                          e.level === 'Medium' ? 'text-yellow-600' :
+                          'text-red-600'
+                        }>{e.level}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Q&A/Doubt Forum */}
+            <div className="mb-6">
+              <h3 className="font-semibold mb-2">Q&A / Doubt Forum</h3>
+              <div className="bg-gray-50 rounded-lg p-4 max-h-60 overflow-y-auto">
+                {qna.map((q, i) => (
+                  <div key={i} className="mb-2 text-sm">
+                    <span className="font-bold text-blue-700">{q.student}</span>: {q.question}
+                    {q.answered ? (
+                      <span className="ml-2 text-green-600">Answered</span>
+                    ) : (
+                      <span className="ml-2 text-red-600 font-bold">Unanswered</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+        {mentorSection === 'taskManagement' && (
+          <section className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-2xl font-bold mb-4 text-green-700">Task Management</h2>
+            {/* Lesson Engagement Analytics */}
+            <div className="mb-6">
+              <h3 className="font-semibold mb-2">Lesson Engagement Analytics</h3>
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={lessons} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="lesson" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="completionRate" fill="#6366f1" />
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="mt-4">{lessons.map(l => (
+                <div key={l.lesson} className="mb-2">
+                  <span className="font-semibold">{l.lesson}:</span> Completion: {l.completionRate}%, Avg Time: {l.avgTime} min, Feedback: {l.feedback || 'None'}
+                </div>
+              ))}</div>
+            </div>
+            {/* Task Submission Tracker */}
+            <div className="mb-6">
+              <h3 className="font-semibold mb-2">Task Submission Tracker</h3>
+              <table className="min-w-full bg-white border rounded-lg">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-2 border-b align-middle text-left">Task</th>
+                    <th className="px-4 py-2 border-b align-middle text-center">Status</th>
+                    <th className="px-4 py-2 border-b align-middle text-center">Submitted</th>
+                    <th className="px-4 py-2 border-b align-middle text-center">Graded</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {submissions.map((s, i) => (
+                    <tr key={s.taskId} className={i % 2 === 0 ? 'bg-gray-50' : ''}>
+                      <td className="px-4 py-2 border-b align-middle text-left">{s.task}</td>
+                      <td className="px-4 py-2 border-b align-middle text-center">{s.status}</td>
+                      <td className="px-4 py-2 border-b align-middle text-center">{s.submitted}</td>
+                      <td className="px-4 py-2 border-b align-middle text-center">{s.graded}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {/* Feedback on Submissions */}
+            <div className="mb-6">
+              <h3 className="font-semibold mb-2">Feedback on Submissions</h3>
+              <div className="bg-gray-50 rounded-lg p-4 max-h-60 overflow-y-auto">
+                {submissions.map((s, i) => (
+                  <div key={i} className="mb-2 text-sm">
+                    <span className="font-bold text-blue-700">{s.student}</span> - <span className="font-semibold">{s.task}</span>: {s.feedback || 'No feedback yet.'}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+      </div>
+    );
+  };
+
+  // In the main return:
+  if (mode === 'admin') {
+    return (
+      <div className="space-y-8">
+        {renderAdminAnalytics()}
+      </div>
+    );
+  }
+  if (mode === 'mentor') {
+    return (
+      <div className="space-y-8">
+        {renderMentorAnalytics()}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

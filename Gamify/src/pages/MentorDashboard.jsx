@@ -191,6 +191,7 @@ export default function MentorDashboard() {
             <BatchAnalytics 
               batchData={selectedBatchForAnalytics}
               studentProgress={[]}
+              mode="mentor"
             />
           </div>
         </div>

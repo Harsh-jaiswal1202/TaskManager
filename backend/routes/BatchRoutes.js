@@ -9,7 +9,9 @@ import {
   getBatchesForUser,
   getAvailableBatchesForUser,
   editBatch,
-  getBatchById
+  getBatchById,
+  getAdminBatchAnalytics,
+  getMentorBatchAnalytics
 } from '../controllers/Batch.js';
 import { authenticateJWT } from '../controllers/User.js';
 import * as batchMessageController from '../controllers/BatchMessage.js';
@@ -27,6 +29,8 @@ router.put('/:id', authenticateJWT, editBatch);
 router.get('/user', getBatchesForUser);
 router.get('/available', getAvailableBatchesForUser);
 router.get('/:id', getBatchById);
+router.get('/:id/analytics/admin', authenticateJWT, getAdminBatchAnalytics);
+router.get('/:id/analytics/mentor', authenticateJWT, getMentorBatchAnalytics);
 
 // Batch chat message routes
 router.get('/:batchId/messages', requireAuth, batchMessageController.getBatchMessages);
