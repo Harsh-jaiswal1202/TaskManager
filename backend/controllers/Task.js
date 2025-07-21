@@ -1,6 +1,7 @@
 import Task from "../models/Task.js";
 import Category from "../models/Category.js";
 import User from "../models/User.js";
+import Submission from "../models/Submission.js";
 
 const startTask = async (req, res) => {
   try {
@@ -83,7 +84,26 @@ const getAllTasksForBatch = async (req, res) => {
 
 async function createTask(req, res) {
   try {
-    const { name, description, details, category, difficulty, assignedTo = [], batch } = req.body;
+    const {
+      name,
+      description,
+      details,
+      category,
+      difficulty,
+      assignedTo = [],
+      batch,
+      type = 'Mini-project',
+      points = 100,
+      badge = '',
+      resources = [],
+      dueDate,
+      submissionTypes = ['File Upload'],
+    } = req.body;
+
+    // Validate required fields
+    if (!name || !description || !details || !category || !difficulty) {
+      return res.status(400).json({ message: 'Missing required fields.' });
+    }
 
     // Step 1: Create the new task
     const task = await Task.create({
@@ -94,6 +114,12 @@ async function createTask(req, res) {
       difficulty,
       assignedTo,
       batch,
+      type,
+      points,
+      badge,
+      resources,
+      dueDate,
+      submissionTypes,
     });
 
     // Step 2: Push the task reference into the Category model
@@ -106,7 +132,7 @@ async function createTask(req, res) {
     res.status(201).json(task);
   } catch (error) {
     console.error("Error creating task:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ message: "Failed to create task", error });
   }
 }
 
@@ -160,6 +186,88 @@ async function assignTaskUsers(req, res) {
     res.status(500).json({ error: "Server error" });
   }
 }
+
+// Fetch a single task by its _id
+export const getTaskById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const task = await Task.findById(id);
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+    res.status(200).json(task);
+  } catch (error) {
+    console.error('Error fetching task:', error);
+    res.status(500).json({ message: 'Failed to fetch task', error });
+  }
+};
+
+// POST /api/tasks/:id/submit
+export const submitTask = async (req, res) => {
+  try {
+    const { id } = req.params; // taskId
+    let { userId, submissionType, value } = req.body;
+    // If file is uploaded, override submissionType and value
+    if (req.file) {
+      submissionType = 'File Upload';
+      value = `/uploads/${req.file.filename}`;
+    }
+    if (!userId || !submissionType || !value) {
+      return res.status(400).json({ message: "Missing required fields." });
+    }
+    // Check if task exists
+    const task = await Task.findById(id);
+    if (!task) {
+      return res.status(404).json({ message: "Task not found" });
+    }
+    // Save submission
+    const submission = await Submission.create({
+      userId,
+      taskId: id,
+      submissionType,
+      value,
+    });
+    // Update user progress: add to completedTasks if not already present
+    const user = await User.findById(userId);
+    if (user) {
+      const alreadyCompleted = user.completedTasks.some(
+        (t) => String(t.task) === String(id)
+      );
+      if (!alreadyCompleted) {
+        user.completedTasks.push({ task: id, completedAt: new Date() });
+        user.xps += task.points || 50; // Award points
+        await user.save();
+      }
+    }
+    // Update task completedBy
+    if (!task.completedBy.includes(userId)) {
+      task.completedBy.push(userId);
+      task.completedCount += 1;
+      await task.save();
+    }
+    res.status(201).json({ message: "Submission successful", submission });
+  } catch (error) {
+    console.error("Error submitting task:", error);
+    res.status(500).json({ message: "Failed to submit task", error });
+  }
+};
+
+// GET /api/submissions?taskId=...&userId=...
+export const getUserSubmission = async (req, res) => {
+  try {
+    const { taskId, userId } = req.query;
+    if (!taskId || !userId) {
+      return res.status(400).json({ message: "Missing taskId or userId" });
+    }
+    const submission = await Submission.findOne({ taskId, userId });
+    if (!submission) {
+      return res.status(200).json({ submission: null });
+    }
+    res.status(200).json({ submission });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch submission", error });
+  }
+};
 
 export {
   getAllTasks,

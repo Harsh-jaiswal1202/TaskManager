@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import { motion, AnimatePresence } from 'framer-motion';
+import { FiTrash2 } from 'react-icons/fi';
 
 export default function BatchCoursePage() {
   const { id } = useParams(); // batch id
@@ -236,7 +237,20 @@ export default function BatchCoursePage() {
             className="bg-white rounded-2xl shadow-md p-6 flex flex-col items-center border-t-8"
             style={{ borderTopColor: cat.color || '#8884d8' }}
           >
-            <div className="text-5xl mb-2" style={{ color: cat.color || '#333' }}>{cat.emoji}</div>
+            <div className="w-full flex justify-between items-center mb-2">
+              <div className="text-5xl" style={{ color: cat.color || '#333' }}>{cat.emoji}</div>
+              {/* Modern delete button for admin and mentor only */}
+              {(userDesignation === 'admin' || userDesignation === 'mentor') && (
+                <button
+                  title="Delete Lesson"
+                  onClick={() => handleDeleteCategory(cat._id)}
+                  className="ml-2 p-2 rounded-full bg-red-50 hover:bg-red-100 shadow-md transition-all focus:outline-none border border-red-100 hover:scale-110"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <FiTrash2 className="text-xl text-red-500" />
+                </button>
+              )}
+            </div>
             <div className="font-bold text-xl mb-2 text-center" style={{ color: cat.color || '#333' }}>{cat.name}</div>
             {/* Progress bar */}
             <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
@@ -251,13 +265,13 @@ export default function BatchCoursePage() {
             <div className="text-xs text-gray-500 mb-4 text-center">
               {categoryTaskCounts[cat._id] || 0} tasks available
             </div>
-      <button
+            <button
               className="w-full py-2 rounded-lg text-sm font-semibold transition-all hover:underline bg-gray-100 text-blue-600"
               style={{ background: 'none', border: 'none', boxShadow: 'none' }}
               onClick={() => navigate(`/batch/${id}/category/${cat._id}`)}
-      >
+            >
               View Tasks →
-      </button>
+            </button>
           </div>
         ))}
       </div>

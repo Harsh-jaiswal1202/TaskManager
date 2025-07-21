@@ -16,6 +16,13 @@ const taskSchema = new mongoose.Schema({
   completedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // Users who completed this task
   completionRecords: [{ userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, date: Date }], // When each user completed
   batch: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch' }, // The batch this task belongs to
+  // --- New fields for enhanced task creation ---
+  type: { type: String, enum: ['Mini-project', 'Case Study'], default: 'Mini-project' },
+  points: { type: Number, default: 100 },
+  badge: { type: String },
+  resources: [{ type: String }], // URLs or file references
+  dueDate: { type: Date },
+  submissionTypes: [{ type: String, enum: ['File Upload', 'Link', 'Text Entry'] }],
 });
 
 export default mongoose.model("Task", taskSchema);

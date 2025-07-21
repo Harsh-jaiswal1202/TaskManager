@@ -216,15 +216,26 @@ export default function BatchCategoryTaskPage() {
                       Edit
                     </button>
                   )}
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => handleFlip(index)}
-                    disabled={completedTasks.some((t) => t.taskName === task.name)}
-                    className={`w-1/2 py-2 rounded-br-lg font-bold shadow-md transition-all duration-200 text-xs ${completedTasks.some((t) => t.taskName === task.name) ? "bg-emerald-500 text-white" : "bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:from-purple-500 hover:to-blue-500"}`}
-                  >
-                    {completedTasks.some((t) => t.taskName === task.name) ? "Completed ✓" : "View Task"}
-                  </motion.button>
+                  {userDesignation === 'user' ? (
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => navigate(`/task/${task._id}`)}
+                      className={`w-full py-2 rounded-br-lg font-bold shadow-md transition-all duration-200 text-xs bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:from-purple-500 hover:to-blue-500`}
+                    >
+                      View Task
+                    </motion.button>
+                  ) : (
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => handleFlip(index)}
+                      disabled={completedTasks.some((t) => t.taskName === task.name)}
+                      className={`w-1/2 py-2 rounded-br-lg font-bold shadow-md transition-all duration-200 text-xs ${completedTasks.some((t) => t.taskName === task.name) ? "bg-emerald-500 text-white" : "bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:from-purple-500 hover:to-blue-500"}`}
+                    >
+                      {completedTasks.some((t) => t.taskName === task.name) ? "Completed ✓" : "View Task"}
+                    </motion.button>
+                  )}
                 </div>
               </motion.div>
               {/* Back of card */}

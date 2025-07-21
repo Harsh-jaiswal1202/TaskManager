@@ -30,6 +30,9 @@ const createCategory = async (req, res) => {
 const deleteCategory = async (req, res) => {
   try {
     const { id } = req.params;
+    // Delete all tasks belonging to this category
+    await Task.deleteMany({ category: id });
+    // Now delete the category itself
     const category = await Category.findByIdAndDelete(id);
     if (!category) {
       return res.status(404).json({ message: "Category not found" });

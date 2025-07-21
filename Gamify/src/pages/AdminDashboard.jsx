@@ -1,11 +1,10 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { FaSignOutAlt } from "react-icons/fa";
+import { FaSignOutAlt, FaUserCircle, FaPlus, FaCamera } from "react-icons/fa";
 import Cookies from "js-cookie";
 import { FaEdit, FaTrash, FaSave, FaTimes, FaRegCopy } from "react-icons/fa";
 import { AnimatePresence } from "framer-motion";
-import { useState } from "react";
 import "../index.css";
 import axios from "axios";
 import { restrictMentor, deleteBatch, restrictUser } from '../services/api';
@@ -13,6 +12,7 @@ import EnhancedBatchModal from '../components/EnhancedBatchModal';
 import BatchAnalytics from '../components/BatchAnalytics';
 import api from '../services/api';
 import EnhancedTaskModal from '../components/EnhancedTaskModal';
+import PortalDropdown from "../components/PortalDropdown";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -481,6 +481,76 @@ export default function Dashboard() {
     setTaskModalLoading(false);
   };
 
+  // Profile modal state and handlers (copied from UserDashboard.jsx)
+  const [showProfileMenuModal, setShowProfileMenuModal] = useState(false);
+  const [activePage, setActivePage] = useState('dashboard');
+  const [profileEdit, setProfileEdit] = useState({ avatar: '', username: '', displayName: '', email: '' });
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState('');
+  const [profileEditMode, setProfileEditMode] = useState(false);
+  const [userAvatar, setUserAvatar] = useState('');
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [avatarDeleting, setAvatarDeleting] = useState(false);
+  const profileBtnRef = useRef();
+  const avatarInputRef = useRef();
+  const [profileMenuPos, setProfileMenuPos] = useState({ top: 0 });
+  const userId = Cookies.get('id');
+  useEffect(() => {
+    if (activePage === 'profile' || activePage === 'dashboard') {
+      setProfileLoading(true);
+      axios.get(`http://localhost:3001/api/user/${userId}`)
+        .then(res => {
+          setProfileEdit({
+            avatar: res.data.avatar || '',
+            username: res.data.username || '',
+            displayName: res.data.displayName || '',
+            email: res.data.email || '',
+          });
+          setUserAvatar(res.data.avatar || '');
+          setProfileLoading(false);
+        })
+        .catch(() => {
+          setProfileError('Failed to load profile.');
+          setProfileLoading(false);
+        });
+      setProfileEditMode(false);
+    }
+  }, [activePage, userId]);
+  const handleAvatarChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProfileEdit(prev => ({ ...prev, avatar: reader.result }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+  const handleProfileEditChange = (e) => {
+    const { name, value } = e.target;
+    setProfileEdit(prev => ({ ...prev, [name]: value }));
+  };
+  const handleProfileSave = async () => {
+    setProfileLoading(true);
+    try {
+      await axios.patch(`http://localhost:3001/api/user/${userId}`, {
+        username: profileEdit.username,
+        displayName: profileEdit.displayName,
+        email: profileEdit.email,
+        avatar: profileEdit.avatar,
+      });
+      setUserAvatar(profileEdit.avatar);
+      setProfileEditMode(false);
+      setProfileLoading(false);
+    } catch (err) {
+      setProfileError('Failed to update profile.');
+      setProfileLoading(false);
+    }
+  };
+
+  // Add state for settings and sign out confirmation modals
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 pt-2 p-2 sm:p-4 md:p-8">
       {/* Animated Background Elements */}
@@ -501,10 +571,280 @@ export default function Dashboard() {
           />
         ))}
       </div>
-
+      {/* Profile Modal and Avatar Button (copied from UserDashboard.jsx) */}
+      {showAvatarModal && profileEdit.avatar && (
+        <div
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => setShowAvatarModal(false)}
+          style={{ cursor: 'zoom-out' }}
+        >
+          <div
+            className="relative"
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '90vw', maxHeight: '90vh' }}
+          >
+            <img
+              src={profileEdit.avatar}
+              alt="Profile Full"
+              className="rounded-2xl shadow-2xl max-w-full max-h-[80vh]"
+              style={{ display: 'block' }}
+            />
+            <button
+              className="absolute top-2 right-2 bg-black/70 text-white rounded-full p-2 hover:bg-black/90 transition"
+              onClick={() => setShowAvatarModal(false)}
+              aria-label="Close"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-5 h-5">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+      {activePage === 'profile' ? (
+        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: 'none' }}>
+          <div className="w-full max-w-xl bg-white/90 rounded-2xl shadow-xl p-8 flex flex-col items-center">
+            <button
+              className="self-start mb-4 px-4 py-2 rounded-lg bg-purple-100 text-purple-700 font-semibold hover:bg-purple-200 transition-all"
+              onClick={() => {
+                setActivePage('dashboard');
+                setProfileEditMode(false);
+              }}
+            >
+              ← Back
+            </button>
+            <div className="text-2xl font-bold text-purple-700 mb-6 mt-2">My Profile</div>
+            {profileLoading ? (
+              <div className="text-purple-500 font-semibold">Loading...</div>
+            ) : profileError ? (
+              <div className="text-red-500">{profileError}</div>
+            ) : !profileEditMode ? (
+              <div className="w-full flex flex-col items-center gap-6">
+                <div className="relative w-24 h-24 flex items-center justify-center">
+                  <button
+                    type="button"
+                    aria-label={profileEdit.avatar ? "View avatar" : "Upload avatar"}
+                    className="focus:outline-none w-24 h-24 rounded-full overflow-hidden"
+                    style={{ background: 'none', border: 'none', padding: 0, margin: 0 }}
+                    onClick={e => {
+                      if (profileEdit.avatar) setShowAvatarModal(true);
+                      else if (avatarInputRef.current) avatarInputRef.current.click();
+                    }}
+                  >
+                    {profileEdit.avatar ? (
+                      <img
+                        src={profileEdit.avatar}
+                        alt="Avatar"
+                        className="w-24 h-24 rounded-full object-cover border-4 border-purple-200 shadow"
+                      />
+                    ) : (
+                      <span className="w-24 h-24 flex items-center justify-center rounded-full border-4 border-purple-200 shadow text-purple-400 text-4xl bg-white">
+                        <FaPlus />
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="absolute bottom-1 right-1 bg-white text-purple-600 rounded-full p-1.5 shadow hover:bg-purple-100 transition-all border border-purple-200"
+                    style={{ zIndex: 2 }}
+                    onClick={e => { e.stopPropagation(); avatarInputRef.current && avatarInputRef.current.click(); }}
+                    aria-label="Change photo"
+                  >
+                    <FaCamera size={14} />
+                  </button>
+                  <input
+                    ref={avatarInputRef}
+                    id="avatar-upload"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleAvatarChange}
+                  />
+                </div>
+                {profileEdit.avatar && (
+                  <button
+                    type="button"
+                    className="mt-3 px-4 py-2 rounded bg-red-500 hover:bg-red-600 text-white font-semibold flex items-center gap-2 shadow transition-all"
+                    onClick={async () => {
+                      setProfileEdit(prev => ({ ...prev, avatar: '' }));
+                      setUserAvatar('');
+                      setAvatarDeleting(true);
+                      try {
+                        const token = Cookies.get('authToken');
+                        await axios.patch(`http://localhost:3001/api/user/${userId}`, { avatar: '' }, {
+                          headers: { Authorization: `Bearer ${token}` }
+                        });
+                      } catch (err) {
+                        setProfileError('Failed to delete avatar.');
+                      } finally {
+                        setAvatarDeleting(false);
+                      }
+                    }}
+                    disabled={avatarDeleting}
+                    aria-label="Delete photo"
+                  >
+                    <FaTrash />
+                    Delete
+                  </button>
+                )}
+                <div className="w-full flex flex-col gap-2">
+                  <div>
+                    <span className="block text-xs text-gray-500 font-semibold">Username</span>
+                    <span className="block text-lg text-gray-800 font-bold">{profileEdit.username}</span>
+                  </div>
+                  <div>
+                    <span className="block text-xs text-gray-500 font-semibold">Display Name</span>
+                    <span className="block text-lg text-gray-800 font-bold">{profileEdit.displayName || '-'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-xs text-gray-500 font-semibold">Email</span>
+                    <span className="block text-lg text-gray-800 font-bold">{profileEdit.email}</span>
+                  </div>
+                </div>
+                <button
+                  className="mt-4 px-6 py-2 rounded-lg bg-purple-500 text-white font-semibold hover:bg-purple-600 transition-all"
+                  onClick={() => setProfileEditMode(true)}
+                >
+                  Edit
+                </button>
+              </div>
+            ) : (
+              <form className="w-full flex flex-col items-center gap-4" onSubmit={e => { e.preventDefault(); handleProfileSave(); }}>
+                <div className="relative w-24 h-24 flex items-center justify-center">
+                  <button
+                    type="button"
+                    aria-label={profileEdit.avatar ? "View avatar" : "Upload avatar"}
+                    className="focus:outline-none w-24 h-24 rounded-full overflow-hidden"
+                    style={{ background: 'none', border: 'none', padding: 0, margin: 0 }}
+                    onClick={() => {
+                      if (profileEdit.avatar) setShowAvatarModal(true);
+                      else if (avatarInputRef.current) avatarInputRef.current.click();
+                    }}
+                  >
+                    {profileEdit.avatar ? (
+                      <img
+                        src={profileEdit.avatar}
+                        alt="Avatar"
+                        className="w-24 h-24 rounded-full object-cover border-4 border-purple-200 shadow"
+                      />
+                    ) : (
+                      <span className="w-24 h-24 flex items-center justify-center rounded-full border-4 border-purple-200 shadow text-purple-400 text-4xl bg-white">
+                        <FaPlus />
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="absolute bottom-1 right-1 bg-white text-purple-600 rounded-full p-1.5 shadow hover:bg-purple-100 transition-all border border-purple-200"
+                    style={{ zIndex: 2 }}
+                    onClick={e => { e.stopPropagation(); avatarInputRef.current && avatarInputRef.current.click(); }}
+                    aria-label="Change photo"
+                  >
+                    <FaCamera size={14} />
+                  </button>
+                  {profileEdit.avatar && (
+                    <button
+                      type="button"
+                      className="absolute bottom-1 left-1 bg-red-500 hover:bg-red-600 text-white rounded-full p-1.5 shadow-lg transition-all border border-white"
+                      style={{ zIndex: 2 }}
+                      onClick={e => { e.stopPropagation(); setProfileEdit(prev => ({ ...prev, avatar: '' })); }}
+                      aria-label="Delete photo"
+                    >
+                      <FaTrash size={14} />
+                    </button>
+                  )}
+                  <input
+                    ref={avatarInputRef}
+                    id="avatar-upload"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleAvatarChange}
+                  />
+                </div>
+                {profileEdit.avatar && (
+                  <button
+                    type="button"
+                    className="mt-3 px-4 py-2 rounded bg-red-500 hover:bg-red-600 text-white font-semibold flex items-center gap-2 shadow transition-all"
+                    onClick={async () => {
+                      setProfileEdit(prev => ({ ...prev, avatar: '' }));
+                      setUserAvatar('');
+                      setAvatarDeleting(true);
+                      try {
+                        const token = Cookies.get('authToken');
+                        await axios.patch(`http://localhost:3001/api/user/${userId}`, { avatar: '' }, {
+                          headers: { Authorization: `Bearer ${token}` }
+                        });
+                      } catch (err) {
+                        setProfileError('Failed to delete avatar.');
+                      } finally {
+                        setAvatarDeleting(false);
+                      }
+                    }}
+                    disabled={avatarDeleting}
+                    aria-label="Delete photo"
+                  >
+                    <FaTrash />
+                    Delete
+                  </button>
+                )}
+                <div className="w-full">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Username</label>
+                  <input
+                    type="text"
+                    name="username"
+                    value={profileEdit.username}
+                    onChange={handleProfileEditChange}
+                    className="w-full px-3 py-2 rounded-lg border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                    required
+                  />
+                </div>
+                <div className="w-full">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Display Name</label>
+                  <input
+                    type="text"
+                    name="displayName"
+                    value={profileEdit.displayName}
+                    onChange={handleProfileEditChange}
+                    className="w-full px-3 py-2 rounded-lg border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                  />
+                </div>
+                <div className="w-full">
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={profileEdit.email}
+                    onChange={handleProfileEditChange}
+                    className="w-full px-3 py-2 rounded-lg border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                    required
+                  />
+                </div>
+                <div className="flex gap-4 mt-4">
+                  <button
+                    type="submit"
+                    className="px-6 py-2 rounded-lg bg-purple-500 text-white font-semibold hover:bg-purple-600 transition-all"
+                    disabled={profileLoading}
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    className="px-6 py-2 rounded-lg bg-gray-200 text-gray-700 font-semibold hover:bg-gray-300 transition-all"
+                    onClick={() => setProfileEditMode(false)}
+                    disabled={profileLoading}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      ) : null}
       {/* Main Content */}
       <div className="relative z-10">
-        {/* Gamified Navigation Bar */}
+        {/* Gamified Navigation Bar with Profile Button */}
         <nav className="relative bg-[var(--card-bg)] backdrop-blur-md shadow-lg rounded-2xl p-2 sm:p-4 mb-4 sm:mb-8 md:mb-12 border-2 border-[var(--border-color)] mt-0">
           <div className="flex flex-col md:flex-row justify-between items-center gap-3 sm:gap-4">
             <div className="flex items-center gap-2 sm:gap-3">
@@ -552,17 +892,62 @@ export default function Dashboard() {
                 <span>View users</span>
                 <span className="text-base sm:text-lg">🏆</span>
               </button>
-              {/* Absolute Sign Out Button */}
+              {/* Profile Button */}
+              <div className="relative" style={{ display: 'inline-block' }}>
               <button
+                  ref={profileBtnRef}
                 onClick={() => {
-                  Cookies.remove("id");
-                  window.location.href = "/login";
-                }}
-                className="flex top-4 right-4 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-red-500 hover:bg-red-600 text-white text-lg sm:text-xl font-bold shadow-lg flex items-center justify-center transition-all duration-300 z-50"
-                title="Sign Out"
-              >
-                <FaSignOutAlt />
+                    if (profileBtnRef.current) {
+                      const rect = profileBtnRef.current.getBoundingClientRect();
+                      setProfileMenuPos({ top: rect.bottom + window.scrollY });
+                    }
+                    setShowProfileMenuModal(true);
+                  }}
+                  className="flex items-center gap-2 w-12 h-12 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xl font-bold shadow-lg justify-center transition-all duration-300 z-50 cursor-pointer overflow-hidden"
+                  title="Profile"
+                  style={{ padding: 0 }}
+                >
+                  {userAvatar ? (
+                    <img src={userAvatar} alt="Avatar" className="w-12 h-12 rounded-full object-cover" />
+                  ) : (
+                    <FaUserCircle />
+                  )}
+                </button>
+                {showProfileMenuModal && (
+                  <PortalDropdown
+                    className="z-[100000] bg-white shadow-2xl rounded-xl flex flex-col py-6 px-6"
+                    style={{ top: `${profileMenuPos.top}px`, right: 0, width: '220px', minHeight: '260px', position: 'fixed' }}
+                  >
+                    <button
+                      className="absolute top-3 right-3 text-gray-400 hover:text-purple-600 text-2xl font-bold"
+                      onClick={() => setShowProfileMenuModal(false)}
+                      title="Close"
+                    >
+                      ×
+                    </button>
+                    <div className="w-full flex flex-col gap-2 mt-2">
+                      <button
+                        className="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 text-purple-700 font-semibold"
+                        onClick={() => { setShowProfileMenuModal(false); setActivePage('profile'); }}
+                      >
+                        My Profile
+                      </button>
+                      <button
+                        className="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 text-purple-700 font-semibold"
+                        onClick={() => { setShowProfileMenuModal(false); navigate('/settings'); }}
+                      >
+                        Settings
+                      </button>
+                      <button
+                        className="w-full text-left px-4 py-3 rounded-lg hover:bg-red-100 text-red-600 font-semibold border-t border-purple-100"
+                        onClick={() => { setShowProfileMenuModal(false); setShowSignOutConfirm(true); }}
+                      >
+                        Sign Out
               </button>
+                    </div>
+                  </PortalDropdown>
+                )}
+              </div>
             </div>
           </div>
         </nav>
@@ -1012,6 +1397,39 @@ export default function Dashboard() {
                 className="flex-1 bg-white border-2 border-gray-200 text-gray-600 font-semibold px-4 sm:px-6 py-2 sm:py-3 rounded-xl hover:border-purple-300 text-sm sm:text-base"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sign Out Confirmation Modal */}
+      {showSignOutConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md relative">
+            <button
+              onClick={() => setShowSignOutConfirm(false)}
+              className="absolute top-2 right-2 text-gray-400 hover:text-red-500 text-xl"
+            >
+              &times;
+            </button>
+            <h3 className="text-xl font-bold mb-4 text-red-700">Confirm Sign Out</h3>
+            <p className="text-base text-gray-900 mb-4">Are you sure you want to sign out?</p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowSignOutConfirm(false)}
+                className="px-4 py-2 rounded-lg bg-gray-200 text-gray-800 font-semibold hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  Cookies.remove("id");
+                  window.location.href = "/login";
+                }}
+                className="px-4 py-2 rounded-lg bg-red-500 text-white font-semibold hover:bg-red-600"
+              >
+                Sign Out
               </button>
             </div>
           </div>

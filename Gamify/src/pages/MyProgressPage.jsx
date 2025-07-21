@@ -2,43 +2,31 @@ import React, { useEffect, useState } from "react";
 import { usePoints } from "../contexts/PointsContext";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import Cookies from "js-cookie";
+import axios from "axios";
 
 export default function MyProgressPage() {
   const { points } = usePoints();
   const navigate = useNavigate();
 
   const [completedTasks, setCompletedTasks] = useState([]);
+  const userId = Cookies.get('id');
   const streak = 3; // Example
 
-  // Fetch completed tasks from localStorage
+  // Fetch completed tasks from backend
   useEffect(() => {
-    const getAllCompletedTasks = () => {
-      let all = [];
-
-      for (let key in localStorage) {
-        if (key.startsWith("completedTasks-")) {
-          try {
-            const storedTasks = JSON.parse(localStorage.getItem(key));
-            if (Array.isArray(storedTasks)) {
-              storedTasks.forEach((t) => {
-                all.push({
-                  taskName: t.taskName,
-                  completedAt: t.completedAt,
-                });
-              });
-            }
-          } catch (e) {
-            console.error(`Error parsing tasks from ${key}:`, e);
-          }
+    if (!userId) return;
+    axios.get(`http://localhost:3001/api/users/${userId}`)
+      .then(res => {
+        if (res.data && res.data.completedTasks) {
+          setCompletedTasks(res.data.completedTasks.map(t => ({
+            taskName: t.task.name || t.task, // If populated, use name
+            completedAt: t.completedAt
+          })));
         }
-      }
-
-      return all;
-    };
-
-    const completed = getAllCompletedTasks();
-    setCompletedTasks(completed);
-  }, []);
+      })
+      .catch(() => {});
+  }, [userId]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-6 flex items-center justify-center">
