@@ -7,6 +7,7 @@ import TaskRoutes from "./routes/TaskRoutes.js";
 import UserRoutes from "./routes/UserRoutes.js";
 import BatchRoutes from "./routes/BatchRoutes.js";
 import FeedbackRoutes from "./routes/FeedbackRoutes.js";
+import BatchProgressRoutes from "./routes/BatchProgressRoutes.js";
 
 const app = express();
 
@@ -42,6 +43,7 @@ app.use("/api/tasks", TaskRoutes);
 app.use("/api/user", UserRoutes);
 app.use("/api/batches", BatchRoutes);
 app.use("/api/feedback", FeedbackRoutes);
+app.use("/api/batch-progress", BatchProgressRoutes);
 // Optional test route
 app.get("/", (req, res) => {
   res.send("API is working!");

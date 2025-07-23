@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { FaPlus, FaTrash } from 'react-icons/fa';
 import { FiAward } from 'react-icons/fi';
@@ -30,6 +30,8 @@ export default function EnhancedTaskModal({
   });
   const [assignToAll, setAssignToAll] = useState(true);
   const [resourceLinks, setResourceLinks] = useState(['']);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
 
 
   useEffect(() => {
@@ -70,7 +72,21 @@ export default function EnhancedTaskModal({
       setResourceLinks(['']);
 
     }
-  }, [isEditMode, initialTaskData, isOpen]);
+  }, [isOpen, isEditMode, initialTaskData]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -310,15 +326,126 @@ export default function EnhancedTaskModal({
             <div className="flex-1">
               <label className="block text-sm font-semibold text-gray-700 mb-2">Badge</label>
               <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={formData.badge}
-                  onChange={e => handleInputChange('badge', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  placeholder="e.g. 🏅, ⭐, 🎯"
-                />
-                <FiAward className="text-2xl text-yellow-400" />
+                <div className="relative flex-1" ref={dropdownRef}>
+                  {/* Custom Dropdown Button */}
+                  <button
+                    type="button"
+                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white cursor-pointer text-left flex items-center justify-between"
+                  >
+                    <span className="flex items-center gap-2">
+                      {formData.badge && formData.badge !== 'custom' ? (
+                        <>
+                          <span>{formData.badge}</span>
+                          <span>{[
+                            { emoji: '🏅', name: 'Medal' },
+                            { emoji: '⭐', name: 'Star' },
+                            { emoji: '🎯', name: 'Target' },
+                            { emoji: '🏆', name: 'Trophy' },
+                            { emoji: '💎', name: 'Diamond' },
+                            { emoji: '🔥', name: 'Fire' },
+                            { emoji: '⚡', name: 'Lightning' },
+                            { emoji: '🎖️', name: 'Military Medal' },
+                            { emoji: '👑', name: 'Crown' },
+                            { emoji: '🌟', name: 'Glowing Star' },
+                            { emoji: '💪', name: 'Muscle' },
+                            { emoji: '🚀', name: 'Rocket' },
+                            { emoji: '🎨', name: 'Art' },
+                            { emoji: '💡', name: 'Idea' },
+                            { emoji: '🔧', name: 'Tool' },
+                            { emoji: '📚', name: 'Books' }
+                          ].find(b => b.emoji === formData.badge)?.name || 'Custom'}</span>
+                        </>
+                      ) : formData.badge === 'custom' ? (
+                        <span>🎭 Custom badge...</span>
+                      ) : (
+                        <span className="text-gray-500">Select a badge...</span>
+                      )}
+                    </span>
+                    <svg className={`w-4 h-4 text-gray-400 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {/* Dropdown Options */}
+                  {isDropdownOpen && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-32 overflow-y-auto">
+                      <div
+                        onClick={() => {
+                          handleInputChange('badge', '');
+                          setIsDropdownOpen(false);
+                        }}
+                        className="px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer text-gray-500"
+                      >
+                        Select a badge...
+                      </div>
+                      {[
+                        { emoji: '🏅', name: 'Medal' },
+                        { emoji: '⭐', name: 'Star' },
+                        { emoji: '🎯', name: 'Target' },
+                        { emoji: '🏆', name: 'Trophy' },
+                        { emoji: '💎', name: 'Diamond' },
+                        { emoji: '🔥', name: 'Fire' },
+                        { emoji: '⚡', name: 'Lightning' },
+                        { emoji: '🎖️', name: 'Military Medal' },
+                        { emoji: '👑', name: 'Crown' },
+                        { emoji: '🌟', name: 'Glowing Star' },
+                        { emoji: '💪', name: 'Muscle' },
+                        { emoji: '🚀', name: 'Rocket' },
+                        { emoji: '🎨', name: 'Art' },
+                        { emoji: '💡', name: 'Idea' },
+                        { emoji: '🔧', name: 'Tool' },
+                        { emoji: '📚', name: 'Books' }
+                      ].map((badge, index) => (
+                        <div
+                          key={index}
+                          onClick={() => {
+                            handleInputChange('badge', badge.emoji);
+                            setIsDropdownOpen(false);
+                          }}
+                          className={`px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer flex items-center gap-2 ${
+                            formData.badge === badge.emoji ? 'bg-purple-100 text-purple-700' : ''
+                          }`}
+                        >
+                          <span>{badge.emoji}</span>
+                          <span>{badge.name}</span>
+                        </div>
+                      ))}
+                      <div
+                        onClick={() => {
+                          handleInputChange('badge', 'custom');
+                          setIsDropdownOpen(false);
+                        }}
+                        className={`px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer flex items-center gap-2 ${
+                          formData.badge === 'custom' ? 'bg-purple-100 text-purple-700' : ''
+                        }`}
+                      >
+                        <span>🎭</span>
+                        <span>Custom badge...</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="text-2xl">
+                  {formData.badge && formData.badge !== 'custom' ? formData.badge : '🏅'}
+                </div>
               </div>
+              {formData.badge === 'custom' && (
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={formData.customBadge || ''}
+                    onChange={e => {
+                      handleInputChange('customBadge', e.target.value);
+                      handleInputChange('badge', e.target.value);
+                    }}
+                    className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    placeholder="Enter custom badge (emoji or text)"
+                    autoFocus
+                  />
+                  <FiAward className="text-xl text-yellow-400" />
+                </div>
+              )}
             </div>
           </div>
           {/* Attach Resources */}

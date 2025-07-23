@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { FaPlus, FaTrash, FaIndustry, FaGraduationCap, FaTasks, FaUsers } from 'react-icons/fa';
 import { taskAPI } from '../services/api';
@@ -22,7 +22,7 @@ export default function EnhancedBatchModal({
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    mentor: '',
+    mentors: [], // Changed from single mentor to multiple mentors
     admin: '',
     industryFocus: '',
     difficultyLevel: 'Beginner',
@@ -47,13 +47,20 @@ export default function EnhancedBatchModal({
   const [lessonError, setLessonError] = useState('');
   const [pendingLesson, setPendingLesson] = useState(null);
   const [displayedTasks, setDisplayedTasks] = useState([]);
+  const [isMentorDropdownOpen, setIsMentorDropdownOpen] = useState(false);
+  const mentorDropdownRef = useRef(null);
 
   useEffect(() => {
     if (isEditMode && initialBatchData) {
       setFormData({
         name: initialBatchData.name || '',
         description: initialBatchData.description || '',
-        mentor: initialBatchData.mentor?._id || initialBatchData.mentor || '',
+        mentors: initialBatchData.mentors ? 
+          (Array.isArray(initialBatchData.mentors) ? 
+            initialBatchData.mentors.map(m => m._id || m) : 
+            [initialBatchData.mentors._id || initialBatchData.mentors]
+          ) : 
+          (initialBatchData.mentor ? [initialBatchData.mentor._id || initialBatchData.mentor] : []), // Handle legacy single mentor field
         admin: initialBatchData.admin?._id || initialBatchData.admin || '',
         industryFocus: initialBatchData.industryFocus || '',
         difficultyLevel: initialBatchData.difficultyLevel || 'Beginner',
@@ -65,7 +72,7 @@ export default function EnhancedBatchModal({
       setFormData({
         name: '',
         description: '',
-        mentor: '',
+        mentors: [], // Changed from single mentor to multiple mentors
         admin: '',
         industryFocus: '',
         difficultyLevel: 'Beginner',
@@ -93,6 +100,20 @@ export default function EnhancedBatchModal({
       setPendingLesson(null);
     }
   }, [tasks, pendingLesson, showLessonForm]);
+
+  // Close mentor dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (mentorDropdownRef.current && !mentorDropdownRef.current.contains(event.target)) {
+        setIsMentorDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const industryOptions = [
     'Web Development',
@@ -300,21 +321,84 @@ export default function EnhancedBatchModal({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Industry Mentor *
+                Industry Mentors *
               </label>
-              <select
-                value={formData.mentor}
-                onChange={(e) => handleInputChange('mentor', e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                required
-              >
-                <option value="">Select Mentor</option>
-                {mentors.map(mentor => (
-                  <option key={mentor._id} value={mentor._id}>
-                    {mentor.displayName || mentor.username} - {mentor.company || 'Industry Expert'}
-                  </option>
-                ))}
-              </select>
+              <div className="relative" ref={mentorDropdownRef}>
+                {/* Multi-Select Dropdown Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsMentorDropdownOpen(!isMentorDropdownOpen)}
+                  className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white cursor-pointer text-left flex items-center justify-between"
+                >
+                  <span className="flex-1">
+                    {formData.mentors.length === 0 ? (
+                      <span className="text-gray-500">Select mentors...</span>
+                    ) : (
+                      <span className="text-gray-900">
+                        {formData.mentors.length} mentor{formData.mentors.length !== 1 ? 's' : ''} selected
+                        {formData.mentors.length <= 2 && (
+                          <span className="text-gray-600 ml-1">
+                            ({mentors.filter(m => formData.mentors.includes(m._id)).map(m => m.displayName || m.username).join(', ')})
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  </span>
+                  <svg className={`w-4 h-4 text-gray-400 transition-transform ${isMentorDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {/* Dropdown Options */}
+                {isMentorDropdownOpen && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {mentors.length === 0 ? (
+                      <div className="px-4 py-3 text-sm text-gray-500">
+                        No mentors available
+                      </div>
+                    ) : (
+                      mentors.map(mentor => (
+                        <div
+                          key={mentor._id}
+                          onClick={() => {
+                            const mentorId = mentor._id;
+                            if (formData.mentors.includes(mentorId)) {
+                              // Remove mentor from the list
+                              handleInputChange('mentors', formData.mentors.filter(id => id !== mentorId));
+                            } else {
+                              // Add mentor to the list
+                              handleInputChange('mentors', [...formData.mentors, mentorId]);
+                            }
+                          }}
+                          className={`px-4 py-3 text-sm hover:bg-gray-100 cursor-pointer flex items-center gap-3 ${
+                            formData.mentors.includes(mentor._id) ? 'bg-purple-50 text-purple-700' : 'text-gray-900'
+                          }`}
+                        >
+                          <div className={`w-4 h-4 border-2 rounded flex items-center justify-center ${
+                            formData.mentors.includes(mentor._id) 
+                              ? 'bg-purple-600 border-purple-600' 
+                              : 'border-gray-300'
+                          }`}>
+                            {formData.mentors.includes(mentor._id) && (
+                              <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-medium">
+                              {mentor.displayName || mentor.username}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {mentor.company || 'Industry Expert'}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div>

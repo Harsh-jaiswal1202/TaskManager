@@ -113,9 +113,11 @@ export default function TaskPage() {
       alert('User not logged in');
       return;
     }
+    
     let submissionType = '';
     let value = '';
     let formData = null;
+    
     if (submission.file) {
       submissionType = 'File Upload';
       formData = new FormData();
@@ -139,17 +141,56 @@ export default function TaskPage() {
       alert('Please provide a submission.');
       return;
     }
+    
     try {
+      setStatus('Submitting...');
       const res = await axios.post(`http://localhost:3001/api/tasks/${taskId}/submit`, formData, {
         withCredentials: true,
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setStatus('Submitted');
-      setUserSubmission(res.data.submission);
-      alert('Submission successful!');
+      
+      // Enhanced response handling with real-time progress data
+      if (res.data.success !== false) {
+        setStatus('Submitted');
+        setUserSubmission(res.data.submission);
+        
+        // Silently refresh progress data without alert
+        console.log('✅ Task submitted successfully:', res.data);
+        
+        // Refresh user progress data
+        await fetchUserProgress();
+        
+        // Navigate back to dashboard to see updated progress
+        setTimeout(() => {
+          navigate('/dashboard');
+        }, 500);
+      } else {
+        throw new Error(res.data.message || 'Submission failed');
+      }
     } catch (err) {
-      setStatus('Error');
-      alert('Submission failed.');
+      console.error('Submission error:', err);
+      setStatus('Not Submitted');
+      
+      // Enhanced error handling
+      const errorMessage = err.response?.data?.message || err.message || 'Submission failed. Please try again.';
+      
+      if (errorMessage.includes('already submitted')) {
+        alert('⚠️ This task has already been submitted!');
+      } else {
+        alert(`❌ Submission failed: ${errorMessage}`);
+      }
+    }
+  };
+  
+  // Function to fetch user progress (optional enhancement)
+  const fetchUserProgress = async () => {
+    try {
+      const response = await axios.get(`http://localhost:3001/api/batch-progress/user/${userId}`, {
+        withCredentials: true
+      });
+      console.log('📊 User Progress Updated:', response.data);
+    } catch (error) {
+      console.error('Error fetching user progress:', error);
     }
   };
 
@@ -199,38 +240,45 @@ export default function TaskPage() {
   const submissionTypes = task.submissionTypes || ['File Upload'];
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-4 md:p-8">
-      {/* Back Button - fixed at top left of viewport */}
-      <button
-        onClick={() => navigate(-1)}
-        className="fixed top-8 left-8 z-50 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-full shadow-md font-medium flex items-center gap-2 hover:scale-105 transition-all"
-        style={{ minWidth: 0 }}
-      >
-        <span className="text-xl">←</span>
-        <span className="font-medium">Back</span>
-      </button>
-      <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl p-8 relative">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
+      {/* Back Button - responsive positioning */}
+      <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-sm border-b border-gray-200 p-4">
+        <button
+          onClick={() => navigate(-1)}
+          className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-full shadow-md font-medium flex items-center gap-2 hover:scale-105 transition-all"
+        >
+          <span className="text-xl">←</span>
+          <span className="font-medium hidden sm:inline">Back</span>
+        </button>
+      </div>
+      
+      <div className="flex items-center justify-center p-4 sm:p-6 lg:p-8">
+        <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+          <div className="p-4 sm:p-6 lg:p-8">
         {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-6 mt-8">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-purple-700 mb-1">{task.name}</h1>
-            <div className="flex items-center gap-2 mb-1">
+        <div className="mb-6">
+          <div className="text-center sm:text-left mb-4">
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-purple-700 mb-3">{task.name}</h1>
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-3">
               <span className="px-3 py-1 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs font-semibold">{task.type || 'Task'}</span>
               <span className="px-3 py-1 rounded-full bg-gradient-to-r from-yellow-400 to-pink-400 text-white text-xs font-semibold">{task.difficulty || 'Medium'}</span>
             </div>
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center justify-center sm:justify-start gap-3">
               <span className="text-lg font-bold text-pink-600">{task.points || 100} pts</span>
-              {task.badge && <span className="text-2xl"><FiAward className="inline text-yellow-400" /> {task.badge}</span>}
+              {task.badge && <span className="text-xl sm:text-2xl"><FiAward className="inline text-yellow-400" /> {task.badge}</span>}
             </div>
-            <div className="text-xs text-gray-500">Due: {task.dueDate ? new Date(task.dueDate).toLocaleString() : 'N/A'}</div>
+            <div className="text-xs sm:text-sm text-gray-500 text-center sm:text-right">
+              Due: {task.dueDate ? new Date(task.dueDate).toLocaleString() : 'N/A'}
+            </div>
           </div>
         </div>
         {/* Description */}
-        <div className="mb-6 flex justify-start">
-          <div className="bg-blue-100 border-2 border-blue-400 rounded-2xl shadow p-6 max-w-lg w-full h-80 overflow-y-auto">
-            <div className="text-gray-700 whitespace-pre-line break-words w-full" style={{wordBreak: 'break-word', overflowWrap: 'break-word'}}>
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold text-purple-700 mb-3">Task Description</h3>
+          <div className="bg-blue-100 border-2 border-blue-400 rounded-2xl shadow p-4 sm:p-6 w-full">
+            <div className="text-gray-700 whitespace-pre-line break-words w-full max-h-60 sm:max-h-80 overflow-y-auto" style={{wordBreak: 'break-word', overflowWrap: 'break-word'}}>
               {task.details || 'No description provided.'}
             </div>
           </div>
@@ -243,7 +291,7 @@ export default function TaskPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Upload File</label>
                 <div 
-                  className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 cursor-pointer hover:border-purple-400 hover:bg-purple-50 ${
+                  className={`relative border-2 border-dashed rounded-xl p-4 sm:p-6 lg:p-8 text-center transition-all duration-300 cursor-pointer hover:border-purple-400 hover:bg-purple-50 ${
                     submission.file ? 'border-green-400 bg-green-50' : 'border-gray-300 bg-gray-50'
                   }`}
                   onClick={() => document.getElementById('file-input').click()}
@@ -320,17 +368,34 @@ export default function TaskPage() {
             )}
             {submissionTypes.includes('Link') && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Paste Link</label>
-                <input type="url" value={submission.link} onChange={e => setSubmission(s => ({ ...s, link: e.target.value }))} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-400" placeholder="https://..." />
+                <label className="block text-sm font-medium text-gray-700 mb-2">Paste Link</label>
+                <input 
+                  type="url" 
+                  value={submission.link} 
+                  onChange={e => setSubmission(s => ({ ...s, link: e.target.value }))} 
+                  className="w-full px-3 py-3 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-transparent text-sm sm:text-base" 
+                  placeholder="https://..." 
+                />
               </div>
             )}
             {submissionTypes.includes('Text Entry') && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Text Entry</label>
-                <textarea value={submission.text} onChange={e => setSubmission(s => ({ ...s, text: e.target.value }))} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-400" rows={4} placeholder="Write your answer here..." />
+                <label className="block text-sm font-medium text-gray-700 mb-2">Text Entry</label>
+                <textarea 
+                  value={submission.text} 
+                  onChange={e => setSubmission(s => ({ ...s, text: e.target.value }))} 
+                  className="w-full px-3 py-3 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-400 focus:border-transparent text-sm sm:text-base resize-none" 
+                  rows={4} 
+                  placeholder="Write your answer here..." 
+                />
               </div>
             )}
-            <button type="submit" className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold hover:scale-105 transition">Submit</button>
+            <button 
+              type="submit" 
+              className="w-full py-3 sm:py-4 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold hover:scale-105 transition-all text-sm sm:text-base shadow-lg"
+            >
+              Submit Task
+            </button>
           </form>
         </div>
         {/* Submission Status */}
@@ -381,6 +446,8 @@ export default function TaskPage() {
         <div className="flex items-center gap-4 mt-6">
           <span className="text-lg font-bold text-pink-600">Points to Earn: {task.points || 100}</span>
           {task.badge && <span className="text-2xl"><FiAward className="inline text-yellow-400" /> {task.badge}</span>}
+        </div>
+          </div>
         </div>
       </div>
     </div>

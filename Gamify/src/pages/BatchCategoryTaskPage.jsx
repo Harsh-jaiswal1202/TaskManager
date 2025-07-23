@@ -16,6 +16,7 @@ export default function BatchCategoryTaskPage() {
   const [tasks, setTasks] = useState([]);
   const [flippedCards, setFlippedCards] = useState([]);
   const [completedTasks, setCompletedTasks] = useState([]);
+  const [userSubmissions, setUserSubmissions] = useState([]); // Track real submissions from backend
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [taskName, setTaskName] = useState("");
@@ -36,14 +37,40 @@ export default function BatchCategoryTaskPage() {
 
   useEffect(() => {
     setLoading(true);
+    
+    // Fetch tasks for the category
     axios.get(`http://localhost:3001/api/categories/all/tasks/${categoryId}?batchId=${batchId}`)
       .then(res => {
         setCategory(res.data);
         setTasks(res.data.tasks || []);
+        
+        // Fetch user submissions for these tasks
+        const userId = Cookies.get('id');
+        if (userId && res.data.tasks?.length > 0) {
+          const taskIds = res.data.tasks.map(task => task._id);
+          
+          // Check submissions for each task
+          Promise.all(
+            taskIds.map(taskId => 
+              axios.get(`http://localhost:3001/api/tasks/submissions?taskId=${taskId}&userId=${userId}`, { withCredentials: true })
+                .then(submissionRes => ({ 
+                  taskId, 
+                  submitted: submissionRes.data.submission !== null, 
+                  submission: submissionRes.data.submission 
+                }))
+                .catch(() => ({ taskId, submitted: false, submission: null }))
+            )
+          ).then(submissionResults => {
+            setUserSubmissions(submissionResults);
+            console.log('📋 User submissions loaded:', submissionResults);
+          });
+        }
+        
         setLoading(false);
       })
       .catch(() => setLoading(false));
-    // Load completed tasks from localStorage
+      
+    // Load completed tasks from localStorage (fallback)
     const saved = localStorage.getItem(`completedTasks-${categoryId}`);
     setCompletedTasks(saved ? JSON.parse(saved) : []);
   }, [categoryId, batchId, isSubmitted]);
@@ -217,14 +244,25 @@ export default function BatchCategoryTaskPage() {
                     </button>
                   )}
                   {userDesignation === 'user' ? (
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => navigate(`/task/${task._id}`)}
-                      className={`w-full py-2 rounded-br-lg font-bold shadow-md transition-all duration-200 text-xs bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:from-purple-500 hover:to-blue-500`}
-                    >
-                      View Task
-                    </motion.button>
+                    (() => {
+                      // Check if user has submitted this task
+                      const isSubmitted = userSubmissions.find(sub => sub.taskId === task._id)?.submitted || false;
+                      
+                      return (
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => navigate(`/task/${task._id}`)}
+                          className={`w-full py-2 rounded-br-lg font-bold shadow-md transition-all duration-200 text-xs ${
+                            isSubmitted 
+                              ? "bg-gradient-to-r from-emerald-500 to-green-500 text-white" 
+                              : "bg-gradient-to-r from-blue-500 to-purple-500 text-white hover:from-purple-500 hover:to-blue-500"
+                          }`}
+                        >
+                          {isSubmitted ? "Completed ✓" : "View Task"}
+                        </motion.button>
+                      );
+                    })()
                   ) : (
                     <motion.button
                       whileHover={{ scale: 1.05 }}

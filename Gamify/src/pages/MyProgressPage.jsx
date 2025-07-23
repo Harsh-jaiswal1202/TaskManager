@@ -10,35 +10,126 @@ export default function MyProgressPage() {
   const navigate = useNavigate();
 
   const userId = Cookies.get('id');
-  const [batches, setBatches] = useState([]); // User's batches
-  const [batchStreaks, setBatchStreaks] = useState({}); // { batchId: streak }
+  const [batchProgress, setBatchProgress] = useState([]); // User's batch progress data
   const [loading, setLoading] = useState(true);
+  const [userStats, setUserStats] = useState({
+    totalXP: 0,
+    totalTasksCompleted: 0,
+    totalTasksAssigned: 0,
+    currentStreak: 0
+  });
 
-  // Fetch all batches for the user
+  // Fetch real user progress data
   useEffect(() => {
     if (!userId) return;
     setLoading(true);
-    axios.get(`http://localhost:3001/api/batches/user?userId=${userId}`)
-      .then(res => {
-        setBatches(res.data || []);
+    
+    // Fetch user's batches and calculate real progress
+    axios.get(`http://localhost:3001/api/batches/user?userId=${userId}`, { withCredentials: true })
+      .then(async (batchRes) => {
+        const userBatches = batchRes.data || [];
+        console.log('📊 User batches:', userBatches);
+        
+        if (userBatches.length === 0) {
+          setLoading(false);
+          return;
+        }
+        
+        // For each batch, get tasks and user submissions
+        const batchProgressData = await Promise.all(
+          userBatches.map(async (batch) => {
+            try {
+              // Get all tasks in this batch
+              const tasksRes = await axios.get(`http://localhost:3001/api/tasks/all?batchId=${batch._id}`, { withCredentials: true });
+              const batchTasks = tasksRes.data || [];
+              
+              // Get user submissions for these tasks
+              const submissionPromises = batchTasks.map(task => 
+                axios.get(`http://localhost:3001/api/tasks/submissions?taskId=${task._id}&userId=${userId}`, { withCredentials: true })
+                  .then(res => ({ taskId: task._id, submitted: res.data.submission !== null, submission: res.data.submission }))
+                  .catch(() => ({ taskId: task._id, submitted: false, submission: null }))
+              );
+              
+              const submissions = await Promise.all(submissionPromises);
+              const completedTasks = submissions.filter(sub => sub.submitted).length;
+              const totalTasks = batchTasks.length;
+              
+              // Calculate XP from completed tasks
+              const totalXP = batchTasks
+                .filter(task => submissions.find(sub => sub.taskId === task._id && sub.submitted))
+                .reduce((sum, task) => sum + (task.points || 50), 0);
+              
+              return {
+                batchId: batch,
+                progressMetrics: {
+                  totalTasks,
+                  completedTasks,
+                  submittedTasks: completedTasks,
+                  gradedTasks: 0,
+                  totalPointsEarned: totalXP,
+                  completionPercentage: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
+                  averageGrade: 0
+                },
+                tasks: batchTasks,
+                submissions
+              };
+            } catch (error) {
+              console.error(`Error fetching data for batch ${batch._id}:`, error);
+              return {
+                batchId: batch,
+                progressMetrics: { totalTasks: 0, completedTasks: 0, submittedTasks: 0, gradedTasks: 0, totalPointsEarned: 0, completionPercentage: 0, averageGrade: 0 },
+                tasks: [],
+                submissions: []
+              };
+            }
+          })
+        );
+        
+        setBatchProgress(batchProgressData);
+        
+        // Calculate overall stats
+        const totalTasksAssigned = batchProgressData.reduce((sum, batch) => sum + batch.progressMetrics.totalTasks, 0);
+        const totalTasksCompleted = batchProgressData.reduce((sum, batch) => sum + batch.progressMetrics.completedTasks, 0);
+        const totalXP = batchProgressData.reduce((sum, batch) => sum + batch.progressMetrics.totalPointsEarned, 0);
+        
+        setUserStats({
+          totalXP,
+          totalTasksCompleted,
+          totalTasksAssigned,
+          currentStreak: 0 // TODO: Calculate actual streak
+        });
+        
+        console.log('✅ Real progress data loaded:', {
+          totalTasksAssigned,
+          totalTasksCompleted,
+          totalXP,
+          batchProgressData
+        });
+        
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(error => {
+        console.error('❌ Error fetching user progress:', error);
+        setLoading(false);
+      });
   }, [userId]);
 
-  // For each batch, fetch the streak
+  // Refresh data when user returns from task submission
   useEffect(() => {
-    if (!userId || batches.length === 0) return;
-    batches.forEach(batch => {
-      axios.get(`http://localhost:3001/api/user/${userId}/progress/batch/${batch._id}`)
-        .then(res => {
-          setBatchStreaks(prev => ({ ...prev, [batch._id]: res.data.currentStreak || 0 }));
-        })
-        .catch(() => {
-          setBatchStreaks(prev => ({ ...prev, [batch._id]: 0 }));
-        });
-    });
-  }, [userId, batches]);
+    const handleFocus = () => {
+      if (userId && !loading) {
+        console.log('🔄 Page focused - refreshing progress data...');
+        // Re-trigger the main useEffect by updating a dependency
+        setLoading(true);
+        setTimeout(() => {
+          window.location.reload();
+        }, 100);
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [userId, loading]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-6 flex items-center justify-center">
@@ -97,30 +188,78 @@ export default function MyProgressPage() {
         {/* Progress stats with animations */}
         <div className="p-6 sm:p-8 space-y-8">
           {loading ? (
-            <div className="text-center text-lg text-gray-500">Loading batches...</div>
-          ) : batches.length === 0 ? (
+            <div className="text-center text-lg text-gray-500">Loading progress...</div>
+          ) : batchProgress.length === 0 ? (
             <div className="text-center text-lg text-gray-500">You are not enrolled in any batches.</div>
           ) : (
-            <div className="space-y-6">
-              {batches.map(batch => (
-                <div key={batch._id} className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-xl p-6 border border-amber-100 text-center shadow-md">
-                  <h2 className="text-xl font-bold text-purple-700 mb-2">{batch.name}</h2>
-                  <div className="flex flex-col items-center justify-center">
-                    <div className="text-4xl mb-2 animate-pulse">🔥</div>
-                    <p className="text-sm text-gray-600">Current Streak</p>
-                    <p className="text-2xl font-bold text-amber-600 animate-count">
-                      {batchStreaks[batch._id] !== undefined ? `${batchStreaks[batch._id]} Days` : '...'}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => navigate(`/batch/${batch._id}/analytics`)}
-                    className="mt-4 w-full py-2 rounded-lg text-sm font-semibold transition-all hover:scale-105 bg-gradient-to-r from-purple-500 to-pink-500 text-white"
-                  >
-                    View Progress
-                  </button>
+            <>
+              {/* Overall Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 text-center border border-blue-200">
+                  <div className="text-2xl mb-1">📚</div>
+                  <p className="text-sm text-gray-600">Tasks Assigned</p>
+                  <p className="text-xl font-bold text-blue-600">{userStats.totalTasksAssigned}</p>
                 </div>
-              ))}
-            </div>
+                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 text-center border border-green-200">
+                  <div className="text-2xl mb-1">✅</div>
+                  <p className="text-sm text-gray-600">Tasks Completed</p>
+                  <p className="text-xl font-bold text-green-600">{userStats.totalTasksCompleted}</p>
+                </div>
+                <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 text-center border border-purple-200">
+                  <div className="text-2xl mb-1">⭐</div>
+                  <p className="text-sm text-gray-600">Total XP</p>
+                  <p className="text-xl font-bold text-purple-600">{userStats.totalXP}</p>
+                </div>
+                <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-4 text-center border border-amber-200">
+                  <div className="text-2xl mb-1">🔥</div>
+                  <p className="text-sm text-gray-600">Current Streak</p>
+                  <p className="text-xl font-bold text-amber-600">{userStats.currentStreak} Days</p>
+                </div>
+              </div>
+              
+              {/* Batch-specific Progress */}
+              <div className="space-y-6">
+                {batchProgress.map(progress => (
+                  <div key={progress.batchId?._id || progress._id} className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-xl p-6 border border-amber-100 shadow-md">
+                    <h2 className="text-xl font-bold text-purple-700 mb-4">{progress.batchId?.name || 'Batch Progress'}</h2>
+                    
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                      <div className="text-center">
+                        <div className="text-lg font-semibold text-blue-600">{progress.progressMetrics?.totalTasks || 0}</div>
+                        <div className="text-sm text-gray-600">Total Tasks</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-lg font-semibold text-green-600">{progress.progressMetrics?.completedTasks || 0}</div>
+                        <div className="text-sm text-gray-600">Completed</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-lg font-semibold text-orange-600">{progress.progressMetrics?.submittedTasks || 0}</div>
+                        <div className="text-sm text-gray-600">Submitted</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-lg font-semibold text-purple-600">{progress.progressMetrics?.completionPercentage || 0}%</div>
+                        <div className="text-sm text-gray-600">Progress</div>
+                      </div>
+                    </div>
+                    
+                    {/* Progress Bar */}
+                    <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+                      <div 
+                        className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-500"
+                        style={{ width: `${progress.progressMetrics?.completionPercentage || 0}%` }}
+                      ></div>
+                    </div>
+                    
+                    <button
+                      onClick={() => navigate(`/batch/${progress.batchId?._id}/analytics`)}
+                      className="w-full py-2 rounded-lg text-sm font-semibold transition-all hover:scale-105 bg-gradient-to-r from-purple-500 to-pink-500 text-white"
+                    >
+                      View Detailed Progress
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
 
