@@ -493,7 +493,7 @@ export default function TaskPage() {
               {category?.tasks?.map((task, index) => (
                 <div
                   key={index}
-                  className="relative w-full aspect-[3/4] perspective-1000"
+                  className="relative w-full h-80 perspective-1000 overflow-hidden"
                 >
                   {/* Card container */}
                   <motion.div
@@ -544,7 +544,7 @@ export default function TaskPage() {
                       </div>
 
                       <div className="h-full flex flex-col justify-between">
-                        <div>
+                        <div className="flex-1 overflow-y-auto">
                           <div
                             className={`w-8 h-8 rounded-full flex items-center justify-center ${
                               ["bg-blue-500", "bg-purple-500", "bg-amber-500"][
@@ -554,13 +554,21 @@ export default function TaskPage() {
                           >
                             {index + 1}
                           </div>
-                          <h3 className="text-lg md:text-xl font-bold text-gray-800 mb-2">
+                          <h3
+                            className="text-lg md:text-xl font-bold text-gray-800 mb-2 whitespace-pre-line break-words w-full"
+                            style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
+                            title={task.name}
+                          >
                             {task.name}
                           </h3>
-                          <p className="text-sm text-gray-600 line-clamp-2">
-                            {task.description ||
-                              "Complete this task to earn rewards!"}
-                          </p>
+                          <div className="text-sm text-gray-600 whitespace-pre-line break-words w-full mb-2 select-text" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+                            {task.description}
+                          </div>
+                          <div className="bg-blue-100 border-2 border-blue-400 rounded-2xl shadow p-3 w-full mt-2">
+                            <div className="text-xs text-gray-700 whitespace-pre-line break-words w-full select-text" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+                              {task.details}
+                            </div>
+                          </div>
                         </div>
 
                         <motion.button

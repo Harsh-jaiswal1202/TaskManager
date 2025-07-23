@@ -58,6 +58,7 @@ export default function TaskPage() {
   const [submission, setSubmission] = useState({ file: null, link: '', text: '' });
   const [status, setStatus] = useState('Pending');
   const [userSubmission, setUserSubmission] = useState(null);
+  const [fileError, setFileError] = useState('');
   const userId = Cookies.get('id');
 
   useEffect(() => {
@@ -87,6 +88,24 @@ export default function TaskPage() {
       })
       .catch(() => {});
   }, [taskId, userId]);
+
+  const validateFile = (file) => {
+    const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+    if (file.size > maxSize) {
+      setFileError(`File size (${(file.size / 1024 / 1024).toFixed(2)} MB) exceeds the 10MB limit.`);
+      return false;
+    }
+    setFileError('');
+    return true;
+  };
+
+  const handleFileSelect = (file) => {
+    if (file && validateFile(file)) {
+      setSubmission(s => ({ ...s, file }));
+    } else if (file) {
+      setSubmission(s => ({ ...s, file: null }));
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -209,8 +228,12 @@ export default function TaskPage() {
           </div>
         </div>
         {/* Description */}
-        <div className="mb-6">
-          <div className="text-gray-700 whitespace-pre-line">{task.details || 'No description provided.'}</div>
+        <div className="mb-6 flex justify-start">
+          <div className="bg-blue-100 border-2 border-blue-400 rounded-2xl shadow p-6 max-w-lg w-full h-80 overflow-y-auto">
+            <div className="text-gray-700 whitespace-pre-line break-words w-full" style={{wordBreak: 'break-word', overflowWrap: 'break-word'}}>
+              {task.details || 'No description provided.'}
+            </div>
+          </div>
         </div>
         {/* Submission Area */}
         <div className="mb-6">
@@ -218,8 +241,81 @@ export default function TaskPage() {
           <form className="space-y-4" onSubmit={handleSubmit}>
             {submissionTypes.includes('File Upload') && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Upload File</label>
-                <input type="file" onChange={e => setSubmission(s => ({ ...s, file: e.target.files[0] }))} className="block w-full" />
+                <label className="block text-sm font-medium text-gray-700 mb-2">Upload File</label>
+                <div 
+                  className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 cursor-pointer hover:border-purple-400 hover:bg-purple-50 ${
+                    submission.file ? 'border-green-400 bg-green-50' : 'border-gray-300 bg-gray-50'
+                  }`}
+                  onClick={() => document.getElementById('file-input').click()}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.classList.add('border-purple-400', 'bg-purple-50');
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.classList.remove('border-purple-400', 'bg-purple-50');
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.classList.remove('border-purple-400', 'bg-purple-50');
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0) {
+                      handleFileSelect(files[0]);
+                    }
+                  }}
+                >
+                  <input 
+                    id="file-input"
+                    type="file" 
+                    onChange={e => handleFileSelect(e.target.files[0])} 
+                    className="hidden" 
+                  />
+                  {submission.file ? (
+                    <div className="space-y-3">
+                      <div className="w-16 h-16 mx-auto bg-green-100 rounded-full flex items-center justify-center">
+                        <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-green-700">{submission.file.name}</p>
+                        <p className="text-xs text-green-600">{(submission.file.size / 1024 / 1024).toFixed(2)} MB</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSubmission(s => ({ ...s, file: null }));
+                        }}
+                        className="text-xs text-red-600 hover:text-red-800 underline"
+                      >
+                        Remove file
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="w-16 h-16 mx-auto bg-purple-100 rounded-full flex items-center justify-center">
+                        <svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">Click to upload or drag and drop</p>
+                        <p className="text-xs text-gray-500">PNG, JPG, PDF up to 10MB</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {fileError && (
+                  <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm text-red-600 flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      {fileError}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
             {submissionTypes.includes('Link') && (

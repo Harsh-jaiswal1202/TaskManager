@@ -30,7 +30,7 @@ export default function EnhancedTaskModal({
   });
   const [assignToAll, setAssignToAll] = useState(true);
   const [resourceLinks, setResourceLinks] = useState(['']);
-  const [resourceFiles, setResourceFiles] = useState([]);
+
 
   useEffect(() => {
     if (isEditMode && initialTaskData) {
@@ -50,7 +50,7 @@ export default function EnhancedTaskModal({
       });
       setAssignToAll(!initialTaskData.assignedTo || initialTaskData.assignedTo.length === 0);
       setResourceLinks(initialTaskData.resources?.filter(r => typeof r === 'string') || ['']);
-      setResourceFiles([]);
+
     } else if (!isOpen) {
       setFormData({
         name: '',
@@ -68,7 +68,7 @@ export default function EnhancedTaskModal({
       });
       setAssignToAll(true);
       setResourceLinks(['']);
-      setResourceFiles([]);
+
     }
   }, [isEditMode, initialTaskData, isOpen]);
 
@@ -103,11 +103,6 @@ export default function EnhancedTaskModal({
   const addResourceLink = () => setResourceLinks(links => [...links, '']);
   const removeResourceLink = (idx) => setResourceLinks(links => links.filter((_, i) => i !== idx));
 
-  const handleResourceFileChange = (e) => {
-    setResourceFiles([...resourceFiles, ...Array.from(e.target.files)]);
-  };
-  const removeResourceFile = (idx) => setResourceFiles(files => files.filter((_, i) => i !== idx));
-
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.description.trim() || !formData.details.trim()) {
@@ -116,7 +111,6 @@ export default function EnhancedTaskModal({
     }
     const resources = [
       ...resourceLinks.filter(l => l.trim()),
-      ...resourceFiles,
     ];
     onSubmit({
       ...formData,
@@ -144,13 +138,22 @@ export default function EnhancedTaskModal({
         <div className="sticky top-0 bg-gradient-to-r from-purple-600 to-pink-600 text-white p-6 rounded-t-2xl">
           <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-2xl font-bold">{isEditMode ? 'Edit Task' : 'Create New Task'}</h2>
+              <h2 className="text-2xl font-bold">{isEditMode ? 'Edit Task' : (initialTaskData ? 'Task Details' : 'Create New Task')}</h2>
               <p className="text-purple-100 mt-1">Design real, impactful learning tasks</p>
             </div>
             <button onClick={onClose} className="text-white hover:text-purple-200 text-2xl font-bold">×</button>
           </div>
         </div>
-        {/* Form */}
+        {/* View Mode: Show details in a scrollable card if not editing/creating */}
+        {!isEditMode && initialTaskData ? (
+          <div className="p-6">
+            <div className="bg-blue-100 border-2 border-blue-400 rounded-2xl shadow p-4 max-w-lg w-full h-60 overflow-y-auto">
+              <div className="text-gray-700 whitespace-pre-line break-words w-full" style={{wordBreak: 'break-word', overflowWrap: 'break-word'}}>
+                {initialTaskData.details || 'No description provided.'}
+              </div>
+            </div>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {/* Task Title */}
           <div>
@@ -335,22 +338,6 @@ export default function EnhancedTaskModal({
                 </div>
               ))}
               <button type="button" onClick={addResourceLink} className="text-purple-600 hover:text-purple-800 font-semibold flex items-center gap-1"><FaPlus /> Add Link</button>
-              <input
-                type="file"
-                multiple
-                onChange={handleResourceFileChange}
-                className="mt-2"
-              />
-              {resourceFiles.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {resourceFiles.map((file, idx) => (
-                    <div key={idx} className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded">
-                      <span className="text-xs">{file.name}</span>
-                      <button type="button" onClick={() => removeResourceFile(idx)} className="text-red-500 hover:text-red-700 text-xs"><FaTrash /></button>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
           {/* Error Message */}
@@ -373,6 +360,7 @@ export default function EnhancedTaskModal({
             </button>
           </div>
         </form>
+        )}
       </motion.div>
     </div>
   );
