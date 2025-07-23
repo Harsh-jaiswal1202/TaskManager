@@ -9,24 +9,36 @@ export default function MyProgressPage() {
   const { points } = usePoints();
   const navigate = useNavigate();
 
-  const [completedTasks, setCompletedTasks] = useState([]);
   const userId = Cookies.get('id');
-  const streak = 3; // Example
+  const [batches, setBatches] = useState([]); // User's batches
+  const [batchStreaks, setBatchStreaks] = useState({}); // { batchId: streak }
+  const [loading, setLoading] = useState(true);
 
-  // Fetch completed tasks from backend
+  // Fetch all batches for the user
   useEffect(() => {
     if (!userId) return;
-    axios.get(`http://localhost:3001/api/users/${userId}`)
+    setLoading(true);
+    axios.get(`http://localhost:3001/api/batches/user?userId=${userId}`)
       .then(res => {
-        if (res.data && res.data.completedTasks) {
-          setCompletedTasks(res.data.completedTasks.map(t => ({
-            taskName: t.task.name || t.task, // If populated, use name
-            completedAt: t.completedAt
-          })));
-        }
+        setBatches(res.data || []);
+        setLoading(false);
       })
-      .catch(() => {});
+      .catch(() => setLoading(false));
   }, [userId]);
+
+  // For each batch, fetch the streak
+  useEffect(() => {
+    if (!userId || batches.length === 0) return;
+    batches.forEach(batch => {
+      axios.get(`http://localhost:3001/api/user/${userId}/progress/batch/${batch._id}`)
+        .then(res => {
+          setBatchStreaks(prev => ({ ...prev, [batch._id]: res.data.currentStreak || 0 }));
+        })
+        .catch(() => {
+          setBatchStreaks(prev => ({ ...prev, [batch._id]: 0 }));
+        });
+    });
+  }, [userId, batches]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-6 flex items-center justify-center">
@@ -53,8 +65,7 @@ export default function MyProgressPage() {
       <div className="relative z-10 bg-[var(--card-bg)] backdrop-blur-sm rounded-3xl shadow-2xl border-2 border-[var(--border-color)] w-full max-w-2xl overflow-hidden">
         {/* Header with confetti */}
         <div className="relative bg-gradient-to-r from-purple-500 to-pink-500 p-6 text-center">
-          {completedTasks.length > 3 && (
-            <div className="absolute inset-0 overflow-hidden">
+          {/* <div className="absolute inset-0 overflow-hidden">
               {[...Array(50)].map((_, i) => (
                 <div
                   key={i}
@@ -69,8 +80,7 @@ export default function MyProgressPage() {
                   {["✨", "🎉", "🌟", "🥳"][i % 4]}
                 </div>
               ))}
-            </div>
-          )}
+            </div> */}
 
           <button
             onClick={() => navigate("/dashboard")}
@@ -80,134 +90,60 @@ export default function MyProgressPage() {
           </button>
 
           <h1 className="text-3xl font-bold text-white drop-shadow-md mt-4">
-            Your Achievement Hub
+            Your Batch Progress
           </h1>
         </div>
 
         {/* Progress stats with animations */}
         <div className="p-6 sm:p-8 space-y-8">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-100 text-center">
-              <div className="text-4xl mb-2 animate-bounce">✅</div>
-              <p className="text-sm text-gray-600">Tasks</p>
-              <p className="text-2xl font-bold text-green-600 animate-count">
-                {completedTasks.length}
-              </p>
-            </div>
-
-            <div className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-xl p-4 border border-amber-100 text-center">
-              <div className="text-4xl mb-2 animate-pulse">🔥</div>
-              <p className="text-sm text-gray-600">Current Streak</p>
-              <p className="text-2xl font-bold text-amber-600 animate-count">
-                {streak} Days
-              </p>
-            </div>
-          </div>
-
-          {/* Level progress */}
-          {/* <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 border border-blue-100">
-            <div className="flex justify-between mb-2">
-              <span className="font-medium text-blue-700">Level Progress</span>
-              <span className="text-sm text-blue-500">
-                Level {Math.floor(points / 500) + 1}
-              </span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-3">
-              <div
-                className="bg-gradient-to-r from-blue-400 to-purple-500 h-3 rounded-full transition-all duration-1000"
-                style={{ width: `${((points % 500) / 500) * 100}%` }}
-              />
-            </div>
-            <p className="text-xs text-gray-500 mt-2 text-center">
-              {500 - (points % 500)} XP to next level
-            </p>
-          </div> */}
-
-          {/* Completed tasks */}
-          <div>
-            <h2 className="text-xl font-semibold text-purple-700 mb-4 flex items-center gap-2">
-              <span className="bg-purple-100 text-purple-600 p-1 rounded-full">
-                🏆
-              </span>
-              Your Completed Quests
-            </h2>
-
-            {completedTasks.length === 0 ? (
-              <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6 text-center border-2 border-dashed border-gray-200">
-                <p className="text-gray-500 mb-3">No quests completed yet!</p>
-                <button
-                  onClick={() => navigate("/")}
-                  className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-2 rounded-full font-medium shadow hover:scale-105 transition-transform"
-                >
-                  Start Your First Quest
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-                {completedTasks.map((task, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="bg-white border border-gray-100 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow flex items-start gap-3"
+          {loading ? (
+            <div className="text-center text-lg text-gray-500">Loading batches...</div>
+          ) : batches.length === 0 ? (
+            <div className="text-center text-lg text-gray-500">You are not enrolled in any batches.</div>
+          ) : (
+            <div className="space-y-6">
+              {batches.map(batch => (
+                <div key={batch._id} className="bg-gradient-to-br from-amber-50 to-yellow-50 rounded-xl p-6 border border-amber-100 text-center shadow-md">
+                  <h2 className="text-xl font-bold text-purple-700 mb-2">{batch.name}</h2>
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="text-4xl mb-2 animate-pulse">🔥</div>
+                    <p className="text-sm text-gray-600">Current Streak</p>
+                    <p className="text-2xl font-bold text-amber-600 animate-count">
+                      {batchStreaks[batch._id] !== undefined ? `${batchStreaks[batch._id]} Days` : '...'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => navigate(`/batch/${batch._id}/analytics`)}
+                    className="mt-4 w-full py-2 rounded-lg text-sm font-semibold transition-all hover:scale-105 bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                   >
-                    <div
-                      className={`p-2 rounded-full ${
-                        ["bg-blue-100", "bg-purple-100", "bg-pink-100"][
-                          index % 3
-                        ]
-                      }`}
-                    >
-                      <span
-                        className={`text-lg ${
-                          ["text-blue-500", "text-purple-500", "text-pink-500"][
-                            index % 3
-                          ]
-                        }`}
-                      >
-                        {["✅", "✨", "🎯"][index % 3]}
-                      </span>
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-gray-800">
-                        {task.taskName}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Completed on{" "}
-                        {new Date(task.completedAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <div className="bg-green-50 text-green-600 text-xs font-bold px-2 py-1 rounded-full">
-                      +50 XP
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            )}
-          </div>
+                    View Progress
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
-          {/* Motivational message */}
-          <div className="bg-gradient-to-r from-pink-50 to-rose-50 rounded-xl p-4 border border-pink-200 text-center">
-            <p className="text-lg font-medium text-pink-700 mb-2">
-              {completedTasks.length > 5
+        {/* Motivational message */}
+        <div className="bg-gradient-to-r from-pink-50 to-rose-50 rounded-xl p-4 border border-pink-200 text-center">
+          <p className="text-lg font-medium text-pink-700 mb-2">
+            {/* {completedTasks.length > 5
                 ? "You're on fire! Keep the streak going! 🔥"
                 : completedTasks.length > 0
                 ? "Great progress! Complete 5 more for a bonus! 💎"
-                : "Start your journey today! First quest awaits! 🚀"}
-            </p>
-            <div className="flex justify-center gap-2 mt-3">
-              {[...Array(5)].map((_, i) => (
-                <div
-                  key={i}
-                  className={`w-3 h-3 rounded-full ${
-                    i < Math.min(5, completedTasks.length)
-                      ? "bg-pink-500"
-                      : "bg-pink-200"
-                  }`}
-                />
-              ))}
-            </div>
+                : "Start your journey today! First quest awaits! 🚀"} */}
+          </p>
+          <div className="flex justify-center gap-2 mt-3">
+            {[...Array(5)].map((_, i) => (
+              <div
+                key={i}
+                className={`w-3 h-3 rounded-full ${
+                  i < Math.min(5, completedTasks.length)
+                    ? "bg-pink-500"
+                    : "bg-pink-200"
+                }`}
+              />
+            ))}
           </div>
         </div>
       </div>
