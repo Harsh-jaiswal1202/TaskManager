@@ -779,12 +779,6 @@ export default function Dashboard() {
                       >
                         View Course
                       </button>
-                      <button
-                        onClick={() => navigate(`/batch/${batch._id}/analytics`)}
-                        className="mt-3 sm:mt-4 w-full py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all hover:scale-105 bg-gradient-to-r from-purple-500 to-pink-500 text-white"
-                      >
-                        View Progress
-                      </button>
                       {batch.status === 'completed' && !batch.feedbackGiven && (
                         <button
                           onClick={() => setFeedbackModal({ open: true, batch })}

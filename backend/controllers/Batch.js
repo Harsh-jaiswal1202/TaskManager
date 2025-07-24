@@ -1,5 +1,7 @@
 import Batch from '../models/Batch.js';
 import User from '../models/User.js';
+import UserBatchProgress from '../models/UserBatchProgress.js';
+import Task from '../models/Task.js';
 import mongoose from 'mongoose';
 
 // Create a new batch
@@ -196,15 +198,92 @@ export const enrollUser = async (req, res) => {
   try {
     const { userId } = req.body;
     const batchId = req.params.id;
+    
     // Validate user
     const user = await User.findById(userId);
     if (!user || user.designation !== 'user') {
       return res.status(400).json({ message: 'Only users with user designation can be enrolled' });
     }
-    const batch = await Batch.findByIdAndUpdate(batchId, { $addToSet: { users: userId } }, { new: true });
-    if (!batch) return res.status(404).json({ message: 'Batch not found' });
-    res.status(200).json(batch);
+
+    // Get batch with populated tasks
+    const batch = await Batch.findById(batchId).populate('tasks');
+    if (!batch) {
+      return res.status(404).json({ message: 'Batch not found' });
+    }
+
+    // Check if user is already enrolled
+    if (batch.users.includes(userId)) {
+      return res.status(400).json({ message: 'User is already enrolled in this batch' });
+    }
+
+    // Add user to batch
+    batch.users.push(userId);
+    await batch.save();
+
+    // Initialize UserBatchProgress for this user and batch
+    const existingProgress = await UserBatchProgress.findOne({ userId, batchId });
+    
+    if (!existingProgress) {
+      console.log('🔍 Creating UserBatchProgress for user:', userId, 'batch:', batchId);
+      
+      // Create task progress entries for all tasks in the batch
+      const taskProgress = batch.tasks.map(task => ({
+        taskId: task._id,
+        status: 'not_started',
+        pointsEarned: 0,
+        attempts: 0
+      }));
+
+      // Create new progress record
+      const userProgress = new UserBatchProgress({
+        userId,
+        batchId,
+        taskProgress,
+        progressMetrics: {
+          totalTasks: batch.tasks.length,
+          completedTasks: 0,
+          submittedTasks: 0,
+          gradedTasks: 0,
+          totalPointsEarned: 0,
+          completionPercentage: 0,
+          averageGrade: 0
+        },
+        enrolledAt: new Date(),
+        lastActiveAt: new Date(),
+        status: 'active'
+      });
+
+      // Add initial activity log entry
+      userProgress.addActivity(
+        'milestone_reached',
+        null,
+        `Enrolled in batch: ${batch.name}`,
+        { 
+          batchName: batch.name, 
+          totalTasks: batch.tasks.length,
+          enrollmentDate: new Date()
+        }
+      );
+
+      await userProgress.save();
+      console.log('✅ UserBatchProgress created successfully');
+    } else {
+      console.log('⚠️ UserBatchProgress already exists for this user and batch');
+    }
+
+    // Return updated batch
+    const updatedBatch = await Batch.findById(batchId)
+      .populate('users', 'username displayName email')
+      .populate('mentors', 'username displayName')
+      .populate('admin', 'username displayName');
+    
+    res.status(200).json({ 
+      message: 'User enrolled successfully', 
+      batch: updatedBatch 
+    });
+    
   } catch (error) {
+    console.error('Error enrolling user:', error);
     res.status(500).json({ message: 'Failed to enroll user', error: error.message });
   }
 };

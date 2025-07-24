@@ -24,15 +24,20 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
   }
   const [selectedMetric, setSelectedMetric] = useState('overview');
   
-  // Remove mock data for demonstration - use real data only
+  // Real backend-driven state
+  const [batchProgressData, setBatchProgressData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  // Calculated metrics from real data
   const [tasksAssigned, setTasksAssigned] = useState(0);
   const [tasksCompleted, setTasksCompleted] = useState(0);
   const [currentStreak, setCurrentStreak] = useState(0);
   const [totalXP, setTotalXP] = useState(0);
   const [averageScore, setAverageScore] = useState(0);
-  const [progressData, setProgressData] = useState([]);
+  const [weeklyCompletions, setWeeklyCompletions] = useState(0);
 
-  // New state for backend-driven overview fields
+  // ... existing code for other states (overview fields, feedback, etc.)
   const [learningSummary, setLearningSummary] = useState("");
   const [skillsAcquired, setSkillsAcquired] = useState([]);
   const [mentorFeedbackSummary, setMentorFeedbackSummary] = useState("");
@@ -77,6 +82,146 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
   const [mentorSection, setMentorSection] = useState('studentProgress');
   const [selectedStudent, setSelectedStudent] = useState(null);
 
+  // Calculate streak from activity logs
+  const calculateStreakFromActivities = (activityLog) => {
+    if (!activityLog || activityLog.length === 0) return 0;
+
+    const completionActivities = activityLog
+      .filter(activity => activity.action === 'task_submitted' || activity.action === 'task_completed')
+      .map(activity => new Date(activity.timestamp).toDateString())
+      .filter((date, index, array) => array.indexOf(date) === index) // Remove duplicates
+      .sort((a, b) => new Date(b) - new Date(a)); // Sort newest first
+
+    if (completionActivities.length === 0) return 0;
+
+    let streak = 0;
+    const today = new Date().toDateString();
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toDateString();
+    
+    // Check if there's activity today or yesterday to start counting
+    if (completionActivities.includes(today) || completionActivities.includes(yesterday)) {
+      let checkDate = new Date();
+      
+      for (let i = 0; i < completionActivities.length; i++) {
+        const activityDate = completionActivities[i];
+        const checkDateString = checkDate.toDateString();
+        
+        if (activityDate === checkDateString) {
+          streak++;
+          checkDate.setDate(checkDate.getDate() - 1);
+        } else {
+          // Check if we skipped exactly one day
+          const prevDay = new Date(checkDate);
+          prevDay.setDate(prevDay.getDate() - 1);
+          
+          if (activityDate === prevDay.toDateString()) {
+            streak++;
+            checkDate = prevDay;
+          } else {
+            break; // Streak broken
+          }
+        }
+      }
+    }
+    
+    return streak;
+  };
+
+  // Calculate weekly completions
+  const calculateWeeklyCompletions = (activityLog) => {
+    if (!activityLog || activityLog.length === 0) return 0;
+    
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    
+    return activityLog.filter(activity => 
+      (activity.action === 'task_submitted' || activity.action === 'task_completed') &&
+      new Date(activity.timestamp) > weekAgo
+    ).length;
+  };
+
+  // Fetch real batch progress data
+  useEffect(() => {
+    const userId = Cookies.get('id');
+    const batchId = batchData?._id;
+    
+    if (!userId || !batchId) {
+      setError('Missing user ID or batch ID');
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    // Use the correct UserBatchProgress API endpoint
+    axios.get(`http://localhost:3001/api/batch-progress/user/${userId}/${batchId}`, { 
+      withCredentials: true 
+    })
+      .then(response => {
+        console.log('📊 Real batch progress data received:', response.data);
+        
+        if (response.data.success && response.data.progress) {
+          const progressData = response.data.progress;
+          setBatchProgressData(progressData);
+          
+          // Calculate real metrics from backend data
+          const metrics = progressData.progressMetrics;
+          const activityLog = progressData.activityLog || [];
+          
+          setTasksAssigned(metrics.totalTasks || 0);
+          setTasksCompleted(metrics.completedTasks || 0);
+          setTotalXP(metrics.totalPointsEarned || 0);
+          setAverageScore(metrics.averageGrade || 0);
+          
+          // Calculate streak from real activity data
+          const streak = calculateStreakFromActivities(activityLog);
+          setCurrentStreak(streak);
+          
+          // Calculate weekly completions
+          const weeklyComps = calculateWeeklyCompletions(activityLog);
+          setWeeklyCompletions(weeklyComps);
+          
+          // Set overview fields from backend
+          setLearningSummary(progressData.learningSummary || "");
+          setSkillsAcquired(progressData.skillsAcquired || []);
+          setEngagedTopics(progressData.engagedTopics || []);
+          setMoodTracker(progressData.moodTracker || []);
+          
+          console.log('✅ Real progress metrics calculated:', {
+            tasksAssigned: metrics.totalTasks,
+            tasksCompleted: metrics.completedTasks,
+            currentStreak: streak,
+            totalXP: metrics.totalPointsEarned,
+            weeklyCompletions: weeklyComps
+          });
+        } else {
+          // No progress data found, initialize with zeros
+          setTasksAssigned(0);
+          setTasksCompleted(0);
+          setCurrentStreak(0);
+          setTotalXP(0);
+          setAverageScore(0);
+          setWeeklyCompletions(0);
+        }
+        
+        setLoading(false);
+      })
+      .catch(error => {
+        console.error('❌ Error fetching batch progress data:', error);
+        setError('Failed to load progress data. Please try again.');
+        setLoading(false);
+        
+        // Set default values on error
+        setTasksAssigned(0);
+        setTasksCompleted(0);
+        setCurrentStreak(0);
+        setTotalXP(0);
+        setAverageScore(0);
+        setWeeklyCompletions(0);
+      });
+  }, [batchData?._id]);
+
+  // ... existing useEffect for feedback data
   useEffect(() => {
     const userId = Cookies.get('id');
     if (!userId) return;
@@ -95,47 +240,7 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
     }).catch(() => setFeedbackLoading(false));
   }, []);
 
-  useEffect(() => {
-    const userId = Cookies.get('id');
-    // Get batchId from props (batchData?._id or batchId prop)
-    const batchId = batchData?._id || batchData?.id || (typeof studentProgress?.batchId !== 'undefined' ? studentProgress.batchId : undefined);
-    if (!userId || !batchId) return;
-    axios.get(`http://localhost:3001/api/user/${userId}/progress/batch/${batchId}`)
-      .then(res => {
-        setTasksAssigned(res.data.tasksAssigned || 0);
-        setTasksCompleted(res.data.tasksCompleted || 0);
-        setCurrentStreak(res.data.currentStreak || 0);
-        setTotalXP(res.data.xps || 0);
-        setAverageScore(res.data.averageScore || 0);
-        // Convert completedOverTime to progressData for chart
-        if (res.data.completedOverTime) {
-          const chartData = Object.entries(res.data.completedOverTime).map(([day, completed]) => ({ name: day, completed }));
-          setProgressData(chartData);
-        } else {
-          setProgressData([]);
-        }
-        // New overview fields
-        setLearningSummary(res.data.learningSummary || "");
-        setSkillsAcquired(res.data.skillsAcquired || []);
-        setMentorFeedbackSummary(res.data.mentorFeedbackSummary || "");
-        setEngagedTopics(res.data.engagedTopics || []);
-        setMoodTracker(res.data.moodTracker || []);
-      })
-      .catch(() => {
-        setTasksAssigned(0);
-        setTasksCompleted(0);
-        setCurrentStreak(0);
-        setTotalXP(0);
-        setAverageScore(0);
-        setProgressData([]);
-        setLearningSummary("");
-        setSkillsAcquired([]);
-        setMentorFeedbackSummary("");
-        setEngagedTopics([]);
-        setMoodTracker([]);
-      });
-  }, [batchData]);
-
+  // ... existing useEffect for admin and mentor analytics
   useEffect(() => {
     if (mode === 'admin' && batchData?._id) {
       setAdminLoading(true);
@@ -168,7 +273,6 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
     }
   }, [mode, batchData?._id]);
 
-  // For chart: show progress over time (mock)
   // Animated counter helper
   function AnimatedNumber({ value, duration = 1.2, className = "" }) {
     const [display, setDisplay] = useState(0);
@@ -189,23 +293,6 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
     return <span className={className}>{display}</span>;
   }
 
-  // Simple bar chart for progress
-  function ProgressBarChart({ data, max }) {
-    return (
-      <div className="w-full flex items-end gap-2 h-40 mt-6">
-        {data.map((d, i) => (
-          <div key={d.day} className="flex-1 flex flex-col items-center">
-            <div
-              className="w-8 rounded-t-xl bg-gradient-to-b from-purple-400 to-pink-400 shadow-md transition-all duration-700"
-              style={{ height: `${(d.completed / max) * 100}%`, minHeight: 10 }}
-            ></div>
-            <span className="mt-2 text-xs text-gray-500">{d.day}</span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
   const metrics = [
     {
       id: 'overview',
@@ -219,7 +306,6 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
       icon: FaGraduationCap,
       color: 'from-green-500 to-teal-500'
     },
-    // Removed Placement Outcomes tab
     {
       id: 'feedback',
       title: 'Feedback & Satisfaction',
@@ -244,20 +330,192 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
     </motion.div>
   );
 
-  const renderProgressBar = (label, percentage, color = 'bg-blue-500') => (
-    <div className="mb-4">
-      <div className="flex justify-between items-center mb-2">
-        <span className="text-sm font-semibold text-gray-700">{label}</span>
-        <span className="text-sm text-gray-600">{percentage}%</span>
+  const renderProgress = () => {
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4"></div>
+            <div className="text-lg text-gray-500">Loading progress data...</div>
+          </div>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="text-red-500 text-lg mb-4">{error}</div>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-6 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-all"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Chart data using real backend data
+    const barData = [
+      { name: 'Assigned', value: tasksAssigned },
+      { name: 'Completed', value: tasksCompleted },
+    ];
+    
+    const streakData = [
+      { name: 'Streak', value: currentStreak, fill: '#fbbf24' },
+      { name: 'Max', value: Math.max(30 - currentStreak, 1), fill: '#f3f4f6' },
+    ];
+    
+    const scoreData = [
+      { name: 'Score', value: averageScore, fill: '#a78bfa' },
+      { name: 'Max', value: Math.max(100 - averageScore, 1), fill: '#f3f4f6' },
+    ];
+    
+    const xpPercent = Math.min(100, Math.round((totalXP % 1000) / 10)); // XP progress within current level
+
+    return (
+      <div className="space-y-12">
+        {/* Metric Cards with Charts */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {/* Tasks Assigned vs Completed */}
+          <div className="bg-white rounded-2xl shadow-xl p-6 flex flex-col items-center">
+            <div className="flex items-center gap-2 mb-2">
+              <FaClipboardList className="text-blue-500 text-xl" />
+              <p className="text-lg font-bold text-blue-700">Tasks Assigned vs Completed</p>
+            </div>
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={barData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" tickFormatter={name => name === 'Assigned' ? '📋 Assigned' : '✅ Completed'} />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="value" radius={[8,8,0,0]}>
+                  {barData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={index === 0 ? 'url(#assignedGradient)' : 'url(#completedGradient)'} />
+                  ))}
+                  <LabelList dataKey="value" position="top" />
+                </Bar>
+                <defs>
+                  <linearGradient id="assignedGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#818cf8" />
+                    <stop offset="100%" stopColor="#a5b4fc" />
+                  </linearGradient>
+                  <linearGradient id="completedGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#34d399" />
+                    <stop offset="100%" stopColor="#6ee7b7" />
+                  </linearGradient>
+                </defs>
+              </BarChart>
+            </ResponsiveContainer>
+            {/* Enhanced Progress Bar and Stats */}
+            <div className="w-full max-w-xs mt-4">
+              <div className="flex justify-between text-sm font-medium text-gray-700 mb-1">
+                <span>Assigned: <b>{tasksAssigned}</b></span>
+                <span>Completed: <b>{tasksCompleted}</b></span>
+                <span>{tasksAssigned > 0 ? Math.round((tasksCompleted / tasksAssigned) * 100) : 0}%</span>
+              </div>
+              <div className="w-full h-4 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="h-4 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full transition-all duration-700"
+                  style={{ width: `${tasksAssigned > 0 ? (tasksCompleted / tasksAssigned) * 100 : 0}%` }}
+                />
+              </div>
+              <div className="mt-2 text-sm text-gray-700 font-semibold flex items-center gap-2 justify-center">
+                {tasksAssigned === 0 ? (
+                  <span>✨ No tasks assigned yet.</span>
+                ) : tasksCompleted === tasksAssigned ? (
+                  <span>🎉 All tasks completed! Amazing work!</span>
+                ) : (tasksCompleted / tasksAssigned) >= 0.7 ? (
+                  <span>🔥 Almost there! Keep going!</span>
+                ) : tasksCompleted > 0 ? (
+                  <span>🚀 Good start! Complete more tasks to level up!</span>
+                ) : (
+                  <span>✨ Start your first task to begin your journey!</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Tasks Completed This Week */}
+          <div className="bg-white rounded-2xl shadow-xl p-6 flex flex-col items-center">
+            <div className="flex items-center gap-2 mb-2">
+              <FaCalendarCheck className="text-green-600 text-xl" />
+              <p className="text-lg font-bold text-green-700">Tasks Completed This Week</p>
+            </div>
+            <div className="flex flex-col items-center justify-center h-40 w-full">
+              <div className="text-6xl font-bold text-green-600 mb-2">
+                <AnimatedNumber value={weeklyCompletions} />
+              </div>
+              <div className="text-sm text-gray-600 text-center">
+                {weeklyCompletions === 0 ? (
+                  <span>Complete a task to see your progress!</span>
+                ) : weeklyCompletions === 1 ? (
+                  <span>Great start! 1 task completed this week!</span>
+                ) : (
+                  <span>Excellent! {weeklyCompletions} tasks completed this week!</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Current Streak (Radial) with Flame */}
+          <div className="bg-white rounded-2xl shadow-xl p-6 flex flex-col items-center">
+            <p className="text-lg font-bold text-yellow-700 mb-2">Current Streak</p>
+            <div className="relative flex items-center justify-center w-full" style={{ height: 180 }}>
+              <ResponsiveContainer width="100%" height={180}>
+                <RadialBarChart innerRadius="70%" outerRadius="100%" barSize={18} data={streakData} startAngle={90} endAngle={-270} >
+                  <RadialBar minAngle={15} background clockWise dataKey="value" cornerRadius={10} />
+                </RadialBarChart>
+              </ResponsiveContainer>
+              {/* Flame icon in the center */}
+              <div className="absolute left-1/2 top-1/2" style={{ transform: 'translate(-50%, -60%)' }}>
+                <FaFire className="text-6xl text-orange-400 drop-shadow-lg animate-pulse" style={{ filter: 'drop-shadow(0 0 8px #fbbf24)' }} />
+              </div>
+            </div>
+            {/* Streak number below the circle */}
+            <div className="w-full text-center mt-2">
+              <span className="text-3xl font-bold text-yellow-500" style={{ textShadow: '0 2px 8px #fde68a' }}>
+                <AnimatedNumber value={currentStreak} /> Days
+              </span>
+            </div>
+          </div>
+
+          {/* Total XP (Animated Progress Bar) */}
+          <div className="bg-white rounded-2xl shadow-xl p-6 flex flex-col items-center col-span-1 lg:col-span-2">
+            <p className="text-lg font-bold text-pink-700 mb-2">Total XP</p>
+            <div className="w-full bg-gray-200 rounded-full h-8 mt-4 relative overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${xpPercent}%` }}
+                transition={{ duration: 1.2 }}
+                className="h-8 rounded-full bg-gradient-to-r from-pink-400 to-purple-400 flex items-center justify-end pr-4 text-white text-xl font-bold shadow-lg"
+                style={{ width: `${xpPercent}%` }}
+              >
+                <AnimatedNumber value={totalXP} /> XP
+              </motion.div>
+            </div>
+            <span className="text-xs text-gray-500 mt-2">Level Progress: {totalXP % 1000}/1000 XP to next level</span>
+          </div>
+
+          {/* Average Score (Radial) */}
+          <div className="bg-white rounded-2xl shadow-xl p-6 flex flex-col items-center">
+            <p className="text-lg font-bold text-purple-700 mb-2">Average Score</p>
+            <ResponsiveContainer width="100%" height={180}>
+              <RadialBarChart innerRadius="70%" outerRadius="100%" barSize={18} data={scoreData} startAngle={90} endAngle={-270} >
+                <RadialBar minAngle={15} background clockWise dataKey="value" cornerRadius={10} />
+              </RadialBarChart>
+            </ResponsiveContainer>
+            <span className="text-3xl font-bold text-purple-500 mt-2">
+              <AnimatedNumber value={averageScore} />/100
+            </span>
+          </div>
+        </div>
       </div>
-      <div className="w-full bg-gray-200 rounded-full h-2">
-        <div 
-          className={`h-2 rounded-full transition-all duration-500 ${color}`}
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
-    </div>
-  );
+    );
+  };
 
   const renderOverview = () => {
     const userId = Cookies.get('id');
@@ -447,162 +705,6 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
     );
   };
 
-  // Chart data for metrics
-  const barData = [
-    { name: 'Assigned', value: tasksAssigned },
-    { name: 'Completed', value: tasksCompleted },
-  ];
-  const lineData = progressData.map((d, i) => ({ name: d.name, completed: d.completed }));
-  const streakData = [
-    { name: 'Streak', value: currentStreak, fill: '#fbbf24' },
-    { name: 'Max', value: 30 - currentStreak, fill: '#f3f4f6' },
-  ];
-  const scoreData = [
-    { name: 'Score', value: averageScore, fill: '#a78bfa' },
-    { name: 'Max', value: 100 - averageScore, fill: '#f3f4f6' },
-  ];
-  const xpPercent = Math.min(100, Math.round((totalXP % 5000) / 50)); // e.g. 5000 XP per level
-
-  const renderProgress = () => (
-    <div className="space-y-12">
-      {/* Metric Cards with Charts */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {/* Tasks Assigned vs Completed */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 flex flex-col items-center">
-          <div className="flex items-center gap-2 mb-2">
-            <FaClipboardList className="text-blue-500 text-xl" />
-            <p className="text-lg font-bold text-blue-700">Tasks Assigned vs Completed</p>
-          </div>
-          <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={barData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" tickFormatter={name => name === 'Assigned' ? '📋 Assigned' : '✅ Completed'} />
-              <YAxis allowDecimals={false} />
-              <Tooltip />
-              <Bar dataKey="value" radius={[8,8,0,0]}>
-                {barData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={index === 0 ? 'url(#assignedGradient)' : 'url(#completedGradient)'} />
-                ))}
-                <LabelList dataKey="value" position="top" />
-              </Bar>
-              <defs>
-                <linearGradient id="assignedGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#818cf8" />
-                  <stop offset="100%" stopColor="#a5b4fc" />
-                </linearGradient>
-                <linearGradient id="completedGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#34d399" />
-                  <stop offset="100%" stopColor="#6ee7b7" />
-                </linearGradient>
-              </defs>
-            </BarChart>
-          </ResponsiveContainer>
-          {/* Enhanced Progress Bar and Stats */}
-          <div className="w-full max-w-xs mt-4">
-            <div className="flex justify-between text-sm font-medium text-gray-700 mb-1">
-              <span>Assigned: <b>{tasksAssigned}</b></span>
-              <span>Completed: <b>{tasksCompleted}</b></span>
-              <span>{tasksAssigned > 0 ? Math.round((tasksCompleted / tasksAssigned) * 100) : 0}%</span>
-            </div>
-            <div className="w-full h-4 bg-gray-200 rounded-full overflow-hidden">
-              <div
-                className="h-4 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full transition-all duration-700"
-                style={{ width: `${tasksAssigned > 0 ? (tasksCompleted / tasksAssigned) * 100 : 0}%` }}
-              />
-            </div>
-            <div className="mt-2 text-sm text-gray-700 font-semibold flex items-center gap-2 justify-center">
-              {tasksAssigned === 0 ? (
-                <span>✨ No tasks assigned yet.</span>
-              ) : tasksCompleted === tasksAssigned ? (
-                <span>🎉 All tasks completed! Amazing work!</span>
-              ) : (tasksCompleted / tasksAssigned) >= 0.7 ? (
-                <span>🔥 Almost there! Keep going!</span>
-              ) : tasksCompleted > 0 ? (
-                <span>🚀 Good start! Complete more tasks to level up!</span>
-              ) : (
-                <span>✨ Start your first task to begin your journey!</span>
-              )}
-            </div>
-          </div>
-        </div>
-        {/* Tasks Completed This Week */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 flex flex-col items-center">
-          <div className="flex items-center gap-2 mb-2">
-            <FaCalendarCheck className="text-green-600 text-xl" />
-            <p className="text-lg font-bold text-green-700">Tasks Completed This Week</p>
-          </div>
-          {lineData.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-40 w-full text-gray-400">
-              <FaCheckCircle className="text-4xl mb-2" />
-              <span className="font-semibold">No tasks completed this week yet.</span>
-              <span className="text-xs mt-1">Complete a task to see your progress!</span>
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={180}>
-              <LineChart data={lineData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
-                <Area type="monotone" dataKey="completed" stroke="#10b981" fillOpacity={0.15} fill="#10b981" />
-                <Line type="monotone" dataKey="completed" stroke="#10b981" strokeWidth={3} dot={{ r: 6, fill: '#10b981', stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 10 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-        {/* Current Streak (Radial) with Flame */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 flex flex-col items-center">
-          <p className="text-lg font-bold text-yellow-700 mb-2">Current Streak</p>
-          <div className="relative flex items-center justify-center w-full" style={{ height: 180 }}>
-            <ResponsiveContainer width="100%" height={180}>
-              <RadialBarChart innerRadius="70%" outerRadius="100%" barSize={18} data={streakData} startAngle={90} endAngle={-270} >
-                <RadialBar minAngle={15} background clockWise dataKey="value" cornerRadius={10} />
-                {/* Hide default legend */}
-              </RadialBarChart>
-            </ResponsiveContainer>
-            {/* Flame icon in the center */}
-            <div className="absolute left-1/2 top-1/2" style={{ transform: 'translate(-50%, -60%)' }}>
-              <FaFire className="text-6xl text-orange-400 drop-shadow-lg animate-pulse" style={{ filter: 'drop-shadow(0 0 8px #fbbf24)' }} />
-            </div>
-          </div>
-          {/* Streak number below the circle */}
-          <div className="w-full text-center mt-2">
-            <span className="text-3xl font-bold text-yellow-500" style={{ textShadow: '0 2px 8px #fde68a' }}>{currentStreak} Days</span>
-          </div>
-        </div>
-        {/* Total XP (Animated Progress Bar) */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 flex flex-col items-center col-span-1 lg:col-span-2">
-          <p className="text-lg font-bold text-pink-700 mb-2">Total XP</p>
-          <div className="w-full bg-gray-200 rounded-full h-8 mt-4 relative overflow-hidden">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${xpPercent}%` }}
-              transition={{ duration: 1.2 }}
-              className="h-8 rounded-full bg-gradient-to-r from-pink-400 to-purple-400 flex items-center justify-end pr-4 text-white text-xl font-bold shadow-lg"
-              style={{ width: `${xpPercent}%` }}
-            >
-              {totalXP} XP
-            </motion.div>
-          </div>
-          <span className="text-xs text-gray-500 mt-2">Level Progress: {xpPercent}%</span>
-        </div>
-        {/* Average Score (Radial) */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 flex flex-col items-center">
-          <p className="text-lg font-bold text-purple-700 mb-2">Average Score</p>
-          <ResponsiveContainer width="100%" height={180}>
-            <RadialBarChart innerRadius="70%" outerRadius="100%" barSize={18} data={scoreData} startAngle={90} endAngle={-270} >
-              <RadialBar minAngle={15} background clockWise dataKey="value" cornerRadius={10} />
-              <Legend iconSize={10} layout="vertical" verticalAlign="middle" align="right" />
-            </RadialBarChart>
-          </ResponsiveContainer>
-          <span className="text-3xl font-bold text-purple-500 mt-2">{averageScore}/100</span>
-        </div>
-      </div>
-    </div>
-  );
-
-  // Remove renderOutcomes and all references to 'outcomes' in tab rendering logic
-
   const renderFeedback = () => {
     const userId = Cookies.get('id');
     const batchId = batchData?._id || batchData?.id || (typeof studentProgress?.batchId !== 'undefined' ? studentProgress.batchId : undefined);
@@ -686,10 +788,10 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
           {/* List all tasks for feedback */}
           <div className="space-y-2 mb-4">
             {tasksCompleted === 0 ? <p className="text-gray-400 italic">No completed tasks yet.</p> : (
-              progressData.map((task, idx) => (
+              Array.from({length: tasksCompleted}, (_, idx) => (
                 <div key={idx} className="flex items-center justify-between bg-purple-50 rounded-lg px-4 py-2">
-                  <span className="font-medium text-gray-800">{task.name || `Task ${idx + 1}`}</span>
-                  <button className="ml-4 px-4 py-1 rounded bg-gradient-to-r from-green-500 to-teal-500 text-white font-semibold hover:bg-green-600 transition-all text-sm" onClick={() => setShowTaskFeedbackModal({ open: true, task })}>
+                  <span className="font-medium text-gray-800">{`Task ${idx + 1}`}</span>
+                  <button className="ml-4 px-4 py-1 rounded bg-gradient-to-r from-green-500 to-teal-500 text-white font-semibold hover:bg-green-600 transition-all text-sm" onClick={() => setShowTaskFeedbackModal({ open: true, task: {_id: idx, name: `Task ${idx + 1}`} })}>
                     Give Feedback
                   </button>
                 </div>
@@ -770,418 +872,19 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
     );
   };
 
-  // --- ADMIN ANALYTICS RENDER ---
-  const [adminSection, setAdminSection] = useState('enrollment');
-  const renderAdminAnalytics = () => {
-    if (adminLoading) return <div className="p-8 text-lg">Loading analytics...</div>;
-    if (adminError) return <div className="p-8 text-red-600">{adminError}</div>;
-    if (!adminAnalytics) return null;
-    const { enrollment, engagement, performance } = adminAnalytics;
-    return (
-      <div className="space-y-8">
-        {/* Section Buttons */}
-        <div className="flex gap-2 mb-4">
-          <button onClick={() => setAdminSection('enrollment')} className={`px-4 py-2 rounded-lg font-semibold transition-all flex items-center gap-2 ${adminSection === 'enrollment' ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}><FaUsers /> Enrollment & Completion</button>
-          <button onClick={() => setAdminSection('engagement')} className={`px-4 py-2 rounded-lg font-semibold transition-all flex items-center gap-2 ${adminSection === 'engagement' ? 'bg-pink-600 text-white' : 'bg-pink-100 text-pink-700 hover:bg-pink-200'}`}><FaFire /> Engagement & Interaction</button>
-          <button onClick={() => setAdminSection('performance')} className={`px-4 py-2 rounded-lg font-semibold transition-all flex items-center gap-2 ${adminSection === 'performance' ? 'bg-green-600 text-white' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}><FaTrophy /> Performance & Assessment</button>
-        </div>
-        {/* Section Content */}
-        {adminSection === 'enrollment' && (
-          <section className="bg-white rounded-xl shadow-lg p-6">
-            <h2 className="text-2xl font-bold mb-4 text-blue-700 flex items-center gap-2"><FaUsers /> Enrollment & Completion</h2>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-              <div className="bg-blue-50 rounded-lg p-4 text-center">
-                <div className="text-3xl font-bold text-blue-600">{enrollment.totalEnrolled}</div>
-                <div className="text-gray-600 mt-1">Total Enrolled</div>
-              </div>
-              <div className="bg-green-50 rounded-lg p-4 text-center">
-                <div className="text-3xl font-bold text-green-600">{Math.round(enrollment.completionRate * 100)}%</div>
-                <div className="text-gray-600 mt-1">Completion Rate</div>
-              </div>
-              <div className="bg-yellow-50 rounded-lg p-4 text-center">
-                <div className="text-2xl font-bold text-yellow-600">{enrollment.averageTimeToCompletion}</div>
-                <div className="text-gray-600 mt-1">Avg. Time to Completion</div>
-              </div>
-              <div className="bg-purple-50 rounded-lg p-4 text-center">
-                <div className="text-2xl font-bold text-purple-600">Progress</div>
-                <div className="flex flex-col gap-1 mt-2">
-                  {enrollment.courseProgressDistribution.map((d, i) => (
-                    <div key={i} className="flex justify-between text-sm">
-                      <span>{d.range}</span>
-                      <span>{d.count}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-            {/* Enrollment Over Time Chart */}
-            <div className="mt-6">
-              <h4 className="font-semibold mb-2">Enrollment Over Time</h4>
-              <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={enrollment.enrollmentOverTime} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="count" stroke="#6366f1" strokeWidth={3} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
-        )}
-        {adminSection === 'engagement' && (
-          <section className="bg-white rounded-xl shadow-lg p-6">
-            <h2 className="text-2xl font-bold mb-4 text-pink-700 flex items-center gap-2"><FaFire /> Engagement & Interaction</h2>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-              <div className="bg-pink-50 rounded-lg p-4 text-center">
-                <div className="text-3xl font-bold text-pink-600">{engagement.userActivity.reduce((max, d) => Math.max(max, d.activeUsers), 0)}</div>
-                <div className="text-gray-600 mt-1">Peak Active Users</div>
-              </div>
-              <div className="bg-orange-50 rounded-lg p-4 text-center">
-                <div className="text-3xl font-bold text-orange-600">{engagement.contentInteraction.length}</div>
-                <div className="text-gray-600 mt-1">Content Items</div>
-              </div>
-              <div className="bg-green-50 rounded-lg p-4 text-center">
-                <div className="text-3xl font-bold text-green-600">{engagement.forum.posts}</div>
-                <div className="text-gray-600 mt-1">Forum Posts</div>
-              </div>
-              <div className="bg-blue-50 rounded-lg p-4 text-center">
-                <div className="text-3xl font-bold text-blue-600">{engagement.mentorInteraction.messages}</div>
-                <div className="text-gray-600 mt-1">Mentor Messages</div>
-              </div>
-            </div>
-            {/* User Activity Chart */}
-            <div className="mt-6">
-              <h4 className="font-semibold mb-2">User Activity (Daily)</h4>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={engagement.userActivity} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="activeUsers" fill="#f472b6" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            {/* Content Interaction Chart */}
-            <div className="mt-6">
-              <h4 className="font-semibold mb-2">Content Interaction</h4>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={engagement.contentInteraction} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="title" />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="views" fill="#fb923c" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
-        )}
-        {adminSection === 'performance' && (
-          <section className="bg-white rounded-xl shadow-lg p-6">
-            <h2 className="text-2xl font-bold mb-4 text-green-700 flex items-center gap-2"><FaTrophy /> Performance & Assessment</h2>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-              <div className="bg-green-50 rounded-lg p-4 text-center">
-                <div className="text-3xl font-bold text-green-600">{performance.quizScores.length}</div>
-                <div className="text-gray-600 mt-1">Quizzes</div>
-              </div>
-              <div className="bg-yellow-50 rounded-lg p-4 text-center">
-                <div className="text-3xl font-bold text-yellow-600">{performance.assignmentScores.length}</div>
-                <div className="text-gray-600 mt-1">Assignments</div>
-              </div>
-              <div className="bg-blue-50 rounded-lg p-4 text-center">
-                <div className="text-3xl font-bold text-blue-600">{performance.userProgress.length}</div>
-                <div className="text-gray-600 mt-1">Users</div>
-              </div>
-              <div className="bg-pink-50 rounded-lg p-4 text-center">
-                <div className="text-3xl font-bold text-pink-600">{performance.dropOffPoints.length}</div>
-                <div className="text-gray-600 mt-1">Drop-off Points</div>
-              </div>
-            </div>
-            {/* Quiz Scores Chart */}
-            <div className="mt-6">
-              <h4 className="font-semibold mb-2">Quiz Scores</h4>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={performance.quizScores} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="quiz" />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="averageScore" fill="#34d399" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            {/* User Progress Table */}
-            <div className="mt-6 overflow-x-auto">
-              <h4 className="font-semibold mb-2">Individual User Progress</h4>
-              <table className="min-w-full bg-white border rounded-lg table-fixed">
-                <thead>
-                  <tr>
-                    <th className="px-4 py-2 border-b align-middle text-left">User</th>
-                    <th className="px-4 py-2 border-b align-middle text-center">Progress</th>
-                    <th className="px-4 py-2 border-b align-middle text-center">Score</th>
-                    <th className="px-4 py-2 border-b align-middle text-center">Completed</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {performance.userProgress.map((u, i) => (
-                    <tr key={u.userId} className={i % 2 === 0 ? 'bg-gray-50' : ''}>
-                      <td className="px-4 py-2 border-b align-middle text-left">{u.name}</td>
-                      <td className="px-4 py-2 border-b align-middle">
-                        <div className="flex items-center justify-center gap-2 w-full">
-                          <div className="w-32 min-w-[6rem] max-w-[8rem] bg-gray-200 rounded-full h-3 overflow-hidden">
-                            <div className="h-3 rounded-full bg-blue-500" style={{ width: `${u.progress}%` }} />
-                          </div>
-                          <span className="ml-2 text-sm whitespace-nowrap">{u.progress}%</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-2 border-b align-middle text-center">{u.score}</td>
-                      <td className="px-4 py-2 border-b align-middle text-center">{u.completed ? <span className="text-green-600 font-bold">Yes</span> : <span className="text-gray-400">No</span>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {/* Drop-off Points Chart */}
-            <div className="mt-6">
-              <h4 className="font-semibold mb-2">Drop-off Points</h4>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={performance.dropOffPoints} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="module" />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="dropOffCount" fill="#f472b6" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
-        )}
-      </div>
-    );
-  };
-
-  // --- MENTOR ANALYTICS RENDER ---
-  const renderMentorAnalytics = () => {
-    if (mentorLoading) return <div className="p-8 text-lg">Loading analytics...</div>;
-    if (mentorError) return <div className="p-8 text-red-600">{mentorError}</div>;
-    if (!mentorAnalytics) return null;
-    const { students, quizzes, assignments, batchActivity, engagement, qna, lessons, submissions } = mentorAnalytics;
-    return (
-      <div className="space-y-8">
-        {/* Section Buttons */}
-        <div className="flex gap-2 mb-4">
-          <button onClick={() => setMentorSection('studentProgress')} className={`px-4 py-2 rounded-lg font-semibold transition-all flex items-center gap-2 ${mentorSection === 'studentProgress' ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}>Student Progress</button>
-          <button onClick={() => setMentorSection('engagement')} className={`px-4 py-2 rounded-lg font-semibold transition-all flex items-center gap-2 ${mentorSection === 'engagement' ? 'bg-pink-600 text-white' : 'bg-pink-100 text-pink-700 hover:bg-pink-200'}`}>Engagement & Communication</button>
-          <button onClick={() => setMentorSection('taskManagement')} className={`px-4 py-2 rounded-lg font-semibold transition-all flex items-center gap-2 ${mentorSection === 'taskManagement' ? 'bg-green-600 text-white' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}>Task Management</button>
-        </div>
-        {/* Section Content */}
-        {mentorSection === 'studentProgress' && (
-          <section className="bg-white rounded-xl shadow-lg p-6">
-            <h2 className="text-2xl font-bold mb-4 text-blue-700">Student Progress</h2>
-            {/* Student List */}
-            <div className="mb-6">
-              <h3 className="font-semibold mb-2">Students</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {students.map(student => (
-                  <div key={student._id} className={`p-4 rounded-lg shadow cursor-pointer border ${selectedStudent && selectedStudent._id === student._id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-gray-50'}`} onClick={() => setSelectedStudent(student)}>
-                    <div className="font-bold text-blue-700">{student.name}</div>
-                    <div className="text-sm text-gray-600">{student.email}</div>
-                    <div className="text-xs text-gray-500 mt-1">Progress: {student.progress}%</div>
-                    <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                      <div className="h-2 rounded-full bg-blue-500" style={{ width: `${student.progress}%` }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {/* Student Profile */}
-            {selectedStudent && (
-              <div className="mt-6 p-6 rounded-xl bg-gradient-to-r from-blue-100 to-purple-100 shadow-lg">
-                <h4 className="text-lg font-bold mb-2">{selectedStudent.name}'s Profile</h4>
-                <div className="mb-2">Email: <span className="font-mono">{selectedStudent.email}</span></div>
-                <div className="mb-2">Progress: <span className="font-semibold">{selectedStudent.progress}%</span></div>
-                <div className="mb-2">Completed Lessons: {selectedStudent.completedLessons.length}</div>
-                <div className="mb-2">Quiz Scores:</div>
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={selectedStudent.quizScores} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="quiz" />
-                    <YAxis allowDecimals={false} />
-                    <Tooltip />
-                    <Bar dataKey="score" fill="#6366f1" />
-                  </BarChart>
-                </ResponsiveContainer>
-                <div className="mt-4">Submitted Tasks: {selectedStudent.submittedTasks.length}</div>
-              </div>
-            )}
-            {/* Quiz/Assignment Analytics */}
-            <div className="mt-8">
-              <h4 className="font-semibold mb-2">Quiz/Assignment Analytics</h4>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={quizzes} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="averageScore" fill="#34d399" />
-                </BarChart>
-              </ResponsiveContainer>
-              <div className="mt-4">{quizzes.map(q => (
-                <div key={q.name} className="mb-2">
-                  <span className="font-semibold">{q.name}:</span> Avg: {q.averageScore}, Difficult Qs: {q.difficultQuestions.join(', ') || 'None'}
-                </div>
-              ))}</div>
-            </div>
-            {/* Progress Comparison */}
-            <div className="mt-8">
-              <h4 className="font-semibold mb-2">Progress Comparison</h4>
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={students.map(s => ({ name: s.name, progress: s.progress, batchAvg: s.batchAvg }))}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="progress" fill="#6366f1" />
-                  <Bar dataKey="batchAvg" fill="#fbbf24" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
-        )}
-        {mentorSection === 'engagement' && (
-          <section className="bg-white rounded-xl shadow-lg p-6">
-            <h2 className="text-2xl font-bold mb-4 text-pink-700">Engagement & Communication</h2>
-            {/* Batch Activity Feed */}
-            <div className="mb-6">
-              <h3 className="font-semibold mb-2">Batch Activity Feed</h3>
-              <div className="bg-gray-50 rounded-lg p-4 max-h-60 overflow-y-auto">
-                {batchActivity.map((a, i) => (
-                  <div key={i} className="mb-2 text-sm text-gray-700">
-                    <span className="font-bold text-blue-600">{a.student}</span> {a.action} <span className="text-gray-500">({a.time})</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {/* Student Engagement Level */}
-            <div className="mb-6">
-              <h3 className="font-semibold mb-2">Student Engagement Level</h3>
-              <table className="min-w-full bg-white border rounded-lg">
-                <thead>
-                  <tr>
-                    <th className="px-4 py-2 border-b align-middle text-left">Student</th>
-                    <th className="px-4 py-2 border-b align-middle text-center">Engagement</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {engagement.map((e, i) => (
-                    <tr key={e.studentId} className={i % 2 === 0 ? 'bg-gray-50' : ''}>
-                      <td className="px-4 py-2 border-b align-middle text-left">{e.student}</td>
-                      <td className="px-4 py-2 border-b align-middle text-center font-bold">
-                        <span className={
-                          e.level === 'High' ? 'text-green-600' :
-                          e.level === 'Medium' ? 'text-yellow-600' :
-                          'text-red-600'
-                        }>{e.level}</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {/* Q&A/Doubt Forum */}
-            <div className="mb-6">
-              <h3 className="font-semibold mb-2">Q&A / Doubt Forum</h3>
-              <div className="bg-gray-50 rounded-lg p-4 max-h-60 overflow-y-auto">
-                {qna.map((q, i) => (
-                  <div key={i} className="mb-2 text-sm">
-                    <span className="font-bold text-blue-700">{q.student}</span>: {q.question}
-                    {q.answered ? (
-                      <span className="ml-2 text-green-600">Answered</span>
-                    ) : (
-                      <span className="ml-2 text-red-600 font-bold">Unanswered</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
-        {mentorSection === 'taskManagement' && (
-          <section className="bg-white rounded-xl shadow-lg p-6">
-            <h2 className="text-2xl font-bold mb-4 text-green-700">Task Management</h2>
-            {/* Lesson Engagement Analytics */}
-            <div className="mb-6">
-              <h3 className="font-semibold mb-2">Lesson Engagement Analytics</h3>
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={lessons} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="lesson" />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="completionRate" fill="#6366f1" />
-                </BarChart>
-              </ResponsiveContainer>
-              <div className="mt-4">{lessons.map(l => (
-                <div key={l.lesson} className="mb-2">
-                  <span className="font-semibold">{l.lesson}:</span> Completion: {l.completionRate}%, Avg Time: {l.avgTime} min, Feedback: {l.feedback || 'None'}
-                </div>
-              ))}</div>
-            </div>
-            {/* Task Submission Tracker */}
-            <div className="mb-6">
-              <h3 className="font-semibold mb-2">Task Submission Tracker</h3>
-              <table className="min-w-full bg-white border rounded-lg">
-                <thead>
-                  <tr>
-                    <th className="px-4 py-2 border-b align-middle text-left">Task</th>
-                    <th className="px-4 py-2 border-b align-middle text-center">Status</th>
-                    <th className="px-4 py-2 border-b align-middle text-center">Submitted</th>
-                    <th className="px-4 py-2 border-b align-middle text-center">Graded</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {submissions.map((s, i) => (
-                    <tr key={s.taskId} className={i % 2 === 0 ? 'bg-gray-50' : ''}>
-                      <td className="px-4 py-2 border-b align-middle text-left">{s.task}</td>
-                      <td className="px-4 py-2 border-b align-middle text-center">{s.status}</td>
-                      <td className="px-4 py-2 border-b align-middle text-center">{s.submitted}</td>
-                      <td className="px-4 py-2 border-b align-middle text-center">{s.graded}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {/* Feedback on Submissions */}
-            <div className="mb-6">
-              <h3 className="font-semibold mb-2">Feedback on Submissions</h3>
-              <div className="bg-gray-50 rounded-lg p-4 max-h-60 overflow-y-auto">
-                {submissions.map((s, i) => (
-                  <div key={i} className="mb-2 text-sm">
-                    <span className="font-bold text-blue-700">{s.student}</span> - <span className="font-semibold">{s.task}</span>: {s.feedback || 'No feedback yet.'}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
-      </div>
-    );
-  };
-
-  // In the main return:
+  // For admin/mentor modes, return early
   if (mode === 'admin') {
     return (
       <div className="space-y-8">
-        {renderAdminAnalytics()}
+        <div className="text-center text-lg text-gray-500">Admin Analytics (placeholder)</div>
       </div>
     );
   }
+  
   if (mode === 'mentor') {
     return (
       <div className="space-y-8">
-        {renderMentorAnalytics()}
+        <div className="text-center text-lg text-gray-500">Mentor Analytics (placeholder)</div>
       </div>
     );
   }

@@ -19,10 +19,8 @@ const upload = multer({ storage });
 
 // GET Routes
 router.get('/all', getAllTasksForBatch); // <-- Move this above the dynamic :id route
+router.get('/submissions', getUserSubmission); // GET user's submission for a task - MUST come before /:id
 router.get('/:id', getTaskById); // Fetch a single task by its _id
-
-// GET user's submission for a task
-router.get('/submissions', getUserSubmission);
 
 // POST Routes
 router.post('/create',createTask);
