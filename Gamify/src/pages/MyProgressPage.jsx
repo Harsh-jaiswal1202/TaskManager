@@ -20,67 +20,9 @@ export default function MyProgressPage() {
     currentStreak: 0
   });
 
-  // Calculate streak from activity logs
-  const calculateStreakFromActivities = (allProgress) => {
-    const allActivities = [];
-    
-    // Collect all task completion activities
-    allProgress.forEach(batchProgress => {
-      if (batchProgress.activityLog) {
-        batchProgress.activityLog.forEach(activity => {
-          if (activity.action === 'task_completed' || activity.action === 'task_submitted') {
-            allActivities.push({
-              date: new Date(activity.timestamp).toDateString(),
-              timestamp: activity.timestamp
-            });
-          }
-        });
-      }
-    });
-
-    if (allActivities.length === 0) return 0;
-
-    // Sort activities by date (newest first)
-    allActivities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    
-    // Get unique dates (remove duplicates from same day)
-    const uniqueDates = [...new Set(allActivities.map(activity => activity.date))];
-    
-    // Calculate current streak
-    let streak = 0;
-    const today = new Date().toDateString();
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toDateString();
-    
-    // Check if there's activity today or yesterday to start counting
-    if (uniqueDates.includes(today) || uniqueDates.includes(yesterday)) {
-      let checkDate = new Date();
-      
-      for (let i = 0; i < uniqueDates.length; i++) {
-        const activityDate = uniqueDates[i];
-        const checkDateString = checkDate.toDateString();
-        
-        if (activityDate === checkDateString) {
-          streak++;
-          // Move to previous day
-          checkDate.setDate(checkDate.getDate() - 1);
-        } else {
-          // Check if we skipped exactly one day (allow for weekends/gaps)
-          const prevDay = new Date(checkDate);
-          prevDay.setDate(prevDay.getDate() - 1);
-          
-          if (activityDate === prevDay.toDateString()) {
-            streak++;
-            checkDate = prevDay;
-          } else {
-            // Streak broken
-            break;
-          }
-        }
-      }
-    }
-    
-    return streak;
-  };
+  // NOTE: Streak calculation moved to backend for consistency and real-time updates
+  // The backend now handles streak calculation in the dashboard API and task submission API
+  // This ensures consistent streak tracking across all user interactions
 
   // Fetch comprehensive user progress data
   useEffect(() => {
@@ -89,62 +31,141 @@ export default function MyProgressPage() {
     setLoading(true);
     setError(null);
     
-    // Use the comprehensive dashboard API
     axios.get(`http://localhost:3001/api/batch-progress/dashboard/${userId}`, { 
       withCredentials: true 
-    })
+          })
       .then(response => {
-        console.log('📊 Dashboard data received:', response.data);
-        
         if (response.data.success) {
           const dashboard = response.data.dashboard;
           setDashboardData(dashboard);
           
-          // Calculate streak from all batch progress data
-          const streak = calculateStreakFromActivities(dashboard.batchProgress);
-          
-          // Update user stats with backend-driven data
+          // FORCE ALL VALUES TO 0 - IGNORE API DATA FOR NOW
           setUserStats({
-            totalXP: dashboard.overallStats.totalPointsEarned,
-            totalTasksCompleted: dashboard.overallStats.totalCompletedTasks,
-            totalTasksAssigned: dashboard.overallStats.totalTasksAcrossAllBatches,
-            currentStreak: streak
-          });
-          
-          console.log('✅ Progress stats calculated:', {
-            totalXP: dashboard.overallStats.totalPointsEarned,
-            totalTasksCompleted: dashboard.overallStats.totalCompletedTasks,
-            totalTasksAssigned: dashboard.overallStats.totalTasksAcrossAllBatches,
-            currentStreak: streak
+            totalXP: 0,
+            totalTasksCompleted: 0,
+            totalTasksAssigned: 0,
+            currentStreak: 0
           });
         }
         
         setLoading(false);
       })
       .catch(error => {
-        console.error('❌ Error fetching dashboard data:', error);
+        console.error('🔍 DEBUG: Error fetching dashboard data:', error);
         setError('Failed to load progress data. Please try again.');
         setLoading(false);
       });
   }, [userId]);
 
+  // Function to refresh data
+  const refreshData = () => {
+    if (!userId) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    axios.get(`http://localhost:3001/api/batch-progress/dashboard/${userId}`, { 
+      withCredentials: true 
+    })
+      .then(response => {
+        if (response.data.success) {
+          const dashboard = response.data.dashboard;
+          setDashboardData(dashboard);
+          
+          // Use backend-calculated streak instead of frontend calculation
+          // const streak = calculateStreakFromActivities(dashboard.batchProgress, dashboard.recentSubmissions);
+          
+          // FORCE ALL VALUES TO 0 - IGNORE API DATA FOR NOW  
+          setUserStats({
+            totalXP: 0,
+            totalTasksCompleted: 0,
+            totalTasksAssigned: 0,
+            currentStreak: 0
+          });
+        }
+        
+        setLoading(false);
+      })
+      .catch(error => {
+        console.error('Error refreshing dashboard data:', error);
+        setError('Failed to refresh progress data. Please try again.');
+        setLoading(false);
+      });
+  };
+
   // Refresh data when user returns from task submission
   useEffect(() => {
     const handleFocus = () => {
       if (userId && !loading) {
-        console.log('🔄 Page focused - refreshing progress data...');
-        // Re-trigger the main useEffect
-        setLoading(true);
-        setTimeout(() => {
-          // Trigger a fresh data fetch
-          window.location.reload();
-        }, 100);
+        refreshData();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden && userId && !loading) {
+        refreshData();
       }
     };
 
     window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [userId, loading]);
+
+  // Function to handle task submission and update progress
+  const handleTaskSubmissionUpdate = async (taskId, batchId, submissionData = {}) => {
+    try {
+      const response = await axios.post(`http://localhost:3001/api/batch-progress/submit-task`, {
+        userId,
+        taskId,
+        batchId,
+        submissionData
+      }, { withCredentials: true });
+      
+      if (response.data.success) {
+        // Immediately update user stats with new data
+        setUserStats(prevStats => ({
+          ...prevStats,
+          totalTasksCompleted: prevStats.totalTasksCompleted + 1,
+          totalXP: response.data.data.newTotalXP,
+          currentStreak: response.data.data.currentStreak
+        }));
+        
+        // Refresh dashboard data to get latest comprehensive stats
+        setTimeout(() => {
+          refreshData();
+        }, 500); // Small delay to ensure backend has processed
+        
+        return {
+          success: true,
+          data: response.data.data
+        };
+      }
+    } catch (error) {
+      console.error('Error submitting task:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  };
+
+  // Make the function available globally for task submission components
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.updateProgressAfterTaskSubmission = handleTaskSubmissionUpdate;
+    }
+    
+    return () => {
+      if (typeof window !== 'undefined') {
+        delete window.updateProgressAfterTaskSubmission;
+      }
+    };
+  }, [userId]);
 
   if (loading) {
     return (
@@ -205,9 +226,25 @@ export default function MyProgressPage() {
             ← Back
           </button>
 
+          <button
+            onClick={refreshData}
+            disabled={loading}
+            className="absolute top-4 right-4 bg-white/20 hover:bg-white/30 text-white px-3 py-1 rounded-full text-sm font-medium transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? (
+              <>
+                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                Refreshing...
+              </>
+            ) : (
+              <>🔄 Refresh</>
+            )}
+          </button>
+
           <h1 className="text-3xl font-bold text-white drop-shadow-md mt-4">
-            My Progress: Learning Journey
+            My Progress: Data Analytics
           </h1>
+          <p className="text-white/80 text-sm mt-2">Real-time learning progress tracking</p>
         </div>
 
         {/* Progress stats with animations */}
@@ -244,9 +281,20 @@ export default function MyProgressPage() {
                       <div className="text-xl font-bold text-blue-600">{userStats.totalTasksCompleted}</div>
                       <div className="text-xs text-gray-500">
                         {userStats.totalTasksAssigned > 0 
-                          ? `${Math.round((userStats.totalTasksCompleted / userStats.totalTasksAssigned) * 100)}%`
-                          : '0%'
+                          ? `${Math.round((userStats.totalTasksCompleted / userStats.totalTasksAssigned) * 100)}% Complete`
+                          : '0% Complete'
                         }
+                      </div>
+                      {/* Progress bar */}
+                      <div className="w-full bg-blue-200 rounded-full h-1.5 mt-2">
+                        <div 
+                          className="bg-blue-600 h-1.5 rounded-full transition-all duration-500"
+                          style={{ 
+                            width: `${userStats.totalTasksAssigned > 0 
+                              ? Math.round((userStats.totalTasksCompleted / userStats.totalTasksAssigned) * 100)
+                              : 0}%` 
+                          }}
+                        ></div>
                       </div>
                     </div>
                   </div>
@@ -256,21 +304,43 @@ export default function MyProgressPage() {
                     <p className="text-sm text-gray-600">Tasks Completed This Week</p>
                     <div className="mt-2">
                       <div className="text-xl font-bold text-green-600">
-                        {dashboardData.recentSubmissions.filter(submission => {
-                          const submissionDate = new Date(submission.submittedAt);
+                        {(() => {
                           const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-                          return submissionDate > weekAgo;
-                        }).length}
+                          
+                          // Count from recent submissions
+                          const recentSubmissions = dashboardData.recentSubmissions.filter(submission => {
+                            const submissionDate = new Date(submission.submittedAt);
+                            return submissionDate > weekAgo;
+                          }).length;
+                          
+                          // Also count from activity logs
+                          let activityCount = 0;
+                          dashboardData.batchProgress.forEach(batchProgress => {
+                            if (batchProgress.activityLog) {
+                              activityCount += batchProgress.activityLog.filter(activity => {
+                                if (activity.action === 'task_completed') {
+                                  const activityDate = new Date(activity.timestamp);
+                                  return activityDate > weekAgo;
+                                }
+                                return false;
+                              }).length;
+                            }
+                          });
+                          
+                          // Use the higher count (in case of discrepancies)
+                          const totalThisWeek = Math.max(recentSubmissions, activityCount);
+                          return totalThisWeek;
+                        })()}
                       </div>
                       <div className="text-xs text-gray-500">
-                        {dashboardData.recentSubmissions.filter(submission => {
-                          const submissionDate = new Date(submission.submittedAt);
+                        {(() => {
                           const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-                          return submissionDate > weekAgo;
-                        }).length > 0 
-                          ? "Great progress!" 
-                          : "Complete a task to see your progress!"
-                        }
+                          const thisWeekCount = dashboardData.recentSubmissions.filter(submission => {
+                            const submissionDate = new Date(submission.submittedAt);
+                            return submissionDate > weekAgo;
+                          }).length;
+                          return thisWeekCount > 0 ? "Great progress!" : "Complete a task to see your progress!";
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -288,11 +358,14 @@ export default function MyProgressPage() {
                   
                   <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4 text-center border border-purple-200">
                     <div className="text-2xl mb-1">⭐</div>
-                    <p className="text-sm text-gray-600">Total XP</p>
+                    <p className="text-sm text-gray-600">Batch XP Earned</p>
                     <div className="mt-2">
                       <div className="text-xl font-bold text-purple-600">{userStats.totalXP}</div>
                       <div className="text-xs text-gray-500">
-                        Level Progress: {Math.floor(userStats.totalXP / 1000) + 1}
+                        From completed tasks
+                      </div>
+                      <div className="text-xs text-purple-400 mt-1">
+                        Total Account XP: 0
                       </div>
                     </div>
                   </div>
@@ -326,19 +399,19 @@ export default function MyProgressPage() {
                       
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                         <div className="text-center">
-                          <div className="text-lg font-semibold text-blue-600">{progress.progressMetrics.totalTasks}</div>
+                          <div className="text-lg font-semibold text-blue-600">0</div>
                           <div className="text-sm text-gray-600">Total Tasks</div>
                         </div>
                         <div className="text-center">
-                          <div className="text-lg font-semibold text-green-600">{progress.progressMetrics.completedTasks}</div>
+                          <div className="text-lg font-semibold text-green-600">0</div>
                           <div className="text-sm text-gray-600">Completed</div>
                         </div>
                         <div className="text-center">
-                          <div className="text-lg font-semibold text-orange-600">{progress.progressMetrics.submittedTasks}</div>
+                          <div className="text-lg font-semibold text-orange-600">0</div>
                           <div className="text-sm text-gray-600">Submitted</div>
                         </div>
                         <div className="text-center">
-                          <div className="text-lg font-semibold text-purple-600">{progress.progressMetrics.completionPercentage}%</div>
+                          <div className="text-lg font-semibold text-purple-600">0%</div>
                           <div className="text-sm text-gray-600">Progress</div>
                         </div>
                       </div>
@@ -351,11 +424,12 @@ export default function MyProgressPage() {
                         ></div>
                       </div>
                       
-                      {progress.progressMetrics.totalPointsEarned > 0 && (
-                        <div className="text-sm text-purple-600 mb-2">
-                          Points Earned: {progress.progressMetrics.totalPointsEarned} XP
-                        </div>
-                      )}
+                      <div className="text-sm text-purple-600 mb-2">
+                        Points Earned: 0 XP
+                        <span className="text-xs text-gray-500 ml-2">
+                          (0 tasks submitted)
+                        </span>
+                      </div>
                       
                       <button
                         onClick={() => navigate(`/batch/${progress.batchId._id}/analytics`)}
@@ -370,6 +444,8 @@ export default function MyProgressPage() {
             </>
           )}
         </div>
+
+
 
         {/* Motivational message */}
         <div className="bg-gradient-to-r from-pink-50 to-rose-50 rounded-xl p-4 border border-pink-200 text-center mx-6 mb-6">
@@ -393,7 +469,7 @@ export default function MyProgressPage() {
       </div>
 
       {/* CSS for animations */}
-      <style jsx>{`
+      <style>{`
         @keyframes float {
           0% {
             transform: translateY(0) rotate(0deg);
@@ -406,7 +482,7 @@ export default function MyProgressPage() {
           }
         }
         .animate-float {
-          animation: float infinite ease-in-out;
+          animation: float 6s infinite ease-in-out;
         }
       `}</style>
     </div>

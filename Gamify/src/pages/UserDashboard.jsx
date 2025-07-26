@@ -69,10 +69,8 @@ export default function Dashboard() {
       return;
     }
 
-    // Fetch user XPS
-    axios.get(`http://localhost:3001/api/user/${id}`)
-      .then(res => setXps(res.data.xps || 0))
-      .catch(() => setXps(0));
+    // FORCE XPS TO 0 - IGNORE API DATA
+    setXps(0);
 
     const today = new Date().toDateString();
     const lastGlobalReset = localStorage.getItem("lastGlobalReset");

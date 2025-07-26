@@ -2,6 +2,8 @@ import Batch from '../models/Batch.js';
 import User from '../models/User.js';
 import UserBatchProgress from '../models/UserBatchProgress.js';
 import Task from '../models/Task.js';
+import Submission from '../models/Submission.js';
+import Feedback from '../models/Feedback.js';
 import mongoose from 'mongoose';
 
 // Create a new batch
@@ -383,102 +385,229 @@ export const getAdminBatchAnalytics = async (req, res) => {
     if (!req.user || (req.user.designation !== 'admin' && req.user.designation !== 'superadmin')) {
       return res.status(403).json({ message: 'Forbidden' });
     }
-    // Fetch batch with users and tasks
-    const batch = await Batch.findById(id)
-      .populate({ path: 'users', select: 'username completedTasks inProgressTasks designation' })
-      .populate({ path: 'tasks' });
+
+    // Fetch batch with populated users and tasks
+    const batch = await Batch.findById(id).populate('users').populate('tasks');
     if (!batch) return res.status(404).json({ message: 'Batch not found' });
-    // ENROLLMENT & COMPLETION
-    const enrollmentOverTime = batch.users.map(u => {
-      // Simulate enrollment date as earliest completed/inProgress task (for demo)
-      let dates = [];
-      if (u.completedTasks) dates = dates.concat(u.completedTasks.map(t => t.completedAt));
-      if (u.inProgressTasks) dates = dates.concat(u.inProgressTasks.map(t => t.startedAt));
-      dates = dates.filter(Boolean).sort();
-      return { user: u.username, date: dates[0] || null };
-    }).filter(e => e.date);
-    // Group by date
-    const enrollmentByDay = {};
-    enrollmentOverTime.forEach(e => {
-      const d = new Date(e.date).toISOString().slice(0, 10);
-      enrollmentByDay[d] = (enrollmentByDay[d] || 0) + 1;
+
+    // Get user progress for this batch - only for enrolled STUDENTS (exclude admins/superadmins)
+    const enrolledStudentIds = batch.users
+      .filter(user => user.designation !== 'admin' && user.designation !== 'superadmin')
+      .map(user => user._id.toString());
+    const allUserProgressData = await UserBatchProgress.find({ batchId: id }).populate('userId');
+    const userProgressData = allUserProgressData.filter(progress => 
+      enrolledStudentIds.includes(progress.userId._id.toString()) &&
+      progress.userId.designation !== 'admin' && 
+      progress.userId.designation !== 'superadmin'
+    );
+    
+    // ==================== ENROLLMENT & COMPLETION ====================
+    
+    // Calculate enrollment rate over time (last 7 days)
+    const enrollmentRate = [];
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+      const dateStr = date.toISOString().split('T')[0];
+      const enrolledOnDay = userProgressData.filter(progress => 
+        new Date(progress.createdAt).toISOString().split('T')[0] === dateStr
+      ).length;
+      
+      enrollmentRate.push({
+        date: dateStr,
+        enrolled: enrolledOnDay
+      });
+    }
+
+    // Calculate completion rate - only count students, not admins/superadmins
+    const totalEnrolled = batch.users.filter(user => 
+      user.designation !== 'admin' && user.designation !== 'superadmin'
+    ).length;
+    const completedUsers = userProgressData.filter(progress => 
+      progress.progressMetrics.completionPercentage >= 100
+    ).length;
+    const completionRate = totalEnrolled > 0 ? Math.round((completedUsers / totalEnrolled) * 100) : 0;
+
+    // Calculate average time to completion
+    const completedProgress = userProgressData.filter(p => p.progressMetrics.completionPercentage >= 100);
+    let averageTimeToCompletion = 0;
+    
+    if (completedProgress.length > 0) {
+      const totalDays = completedProgress.reduce((sum, progress) => {
+        const startDate = new Date(progress.createdAt || batch.startDate || batch.createdAt);
+        const completionActivities = progress.activityLog.filter(log => 
+          log.action === 'task_completed' || log.action === 'milestone_reached'
+        );
+        
+        if (completionActivities.length > 0) {
+          const lastCompletion = completionActivities[completionActivities.length - 1];
+          const endDate = new Date(lastCompletion.timestamp);
+          const daysDiff = (endDate - startDate) / (1000 * 60 * 60 * 24);
+          return sum + Math.max(daysDiff, 0);
+        }
+        return sum;
+      }, 0);
+      
+      averageTimeToCompletion = Math.round((totalDays / completedProgress.length) * 10) / 10;
+    }
+
+    // ==================== ENGAGEMENT & INTERACTION ====================
+    
+    // Calculate daily active users for the last 7 days
+    const userActivity = [];
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      const activeUsers = userProgressData.filter(progress => {
+        return progress.activityLog.some(log => {
+          const logDate = new Date(log.timestamp).toISOString().split('T')[0];
+          return logDate === dateStr;
+        });
+      }).length;
+      
+      userActivity.push({
+        date: dateStr,
+        active: activeUsers
+      });
+    }
+
+    // Calculate content interaction based on task completion and submissions
+    const contentInteraction = [];
+    const tasks = batch.tasks || [];
+    
+    // Video Lectures
+    const videoTasks = tasks.filter(task => task.contentType === 'video');
+    const videoViews = userProgressData.reduce((sum, progress) => {
+      return sum + progress.taskProgress.filter(tp => 
+        videoTasks.some(vt => vt._id.toString() === tp.taskId.toString()) && 
+        tp.status !== 'not_started'
+      ).length;
+    }, 0);
+    contentInteraction.push({ content: 'Video Lectures', views: videoViews, type: 'video' });
+    
+    // Quizzes
+    const quizTasks = tasks.filter(task => task.contentType === 'quiz');
+    const quizViews = userProgressData.reduce((sum, progress) => {
+      return sum + progress.taskProgress.filter(tp => 
+        quizTasks.some(qt => qt._id.toString() === tp.taskId.toString()) && 
+        tp.status !== 'not_started'
+      ).length;
+    }, 0);
+    contentInteraction.push({ content: 'Practice Quizzes', views: quizViews, type: 'quiz' });
+    
+    // Documents
+    const docTasks = tasks.filter(task => task.contentType === 'document');
+    const docViews = userProgressData.reduce((sum, progress) => {
+      return sum + progress.taskProgress.filter(tp => 
+        docTasks.some(dt => dt._id.toString() === tp.taskId.toString()) && 
+        tp.status !== 'not_started'
+      ).length;
+    }, 0);
+    contentInteraction.push({ content: 'Reading Materials', views: docViews, type: 'document' });
+    
+    // Submissions
+    const submissions = await Submission.find({
+      taskId: { $in: tasks.map(t => t._id) }
     });
-    const enrollmentOverTimeArr = Object.entries(enrollmentByDay).map(([date, count]) => ({ date, count }));
-    const totalEnrolled = batch.users.length;
-    // Completion rate
-    const completedUsers = batch.users.filter(u => {
-      const completedTaskIds = (u.completedTasks || []).map(t => t.task?.toString());
-      return batch.tasks.every(task => completedTaskIds.includes(task._id.toString()));
+    contentInteraction.push({ content: 'Assignments', views: submissions.length, type: 'assignment' });
+
+    // Get feedback data for forum analytics
+    const batchFeedback = await Feedback.find({ batch: id });
+    
+    const forumAnalytics = {
+      totalPosts: batchFeedback.length,
+      totalReplies: 0,
+      activeDiscussions: 0,
+      averageResponseTime: 0
+    };
+
+    // Mentor interaction analytics
+    const mentorFeedback = await Feedback.find({ 
+      batch: id,
+      toUser: batch.mentor
     });
-    const completionRate = totalEnrolled === 0 ? 0 : completedUsers.length / totalEnrolled;
-    // Course progress distribution
-    const courseProgressDistribution = [0, 0, 0, 0]; // 0-25, 26-50, 51-75, 76-100
-    batch.users.forEach(u => {
-      const completedTaskIds = (u.completedTasks || []).map(t => t.task?.toString());
-      const percent = batch.tasks.length === 0 ? 0 : (completedTaskIds.length / batch.tasks.length) * 100;
-      if (percent <= 25) courseProgressDistribution[0]++;
-      else if (percent <= 50) courseProgressDistribution[1]++;
-      else if (percent <= 75) courseProgressDistribution[2]++;
-      else courseProgressDistribution[3]++;
-    });
-    // Average time to completion
-    let totalTime = 0, completedCount = 0;
-    batch.users.forEach(u => {
-      const completedTaskRecords = (u.completedTasks || []).filter(t => t.completedAt);
-      if (completedTaskRecords.length === batch.tasks.length && batch.tasks.length > 0) {
-        const times = completedTaskRecords.map(t => t.completedAt).sort();
-        const start = new Date(times[0]);
-        const end = new Date(times[times.length - 1]);
-        totalTime += (end - start);
-        completedCount++;
+    
+    const satisfactionScore = mentorFeedback.length > 0 
+      ? Math.round((mentorFeedback.reduce((sum, f) => sum + (f.rating || 0), 0) / mentorFeedback.length) * 10) / 10
+      : 0;
+
+    const mentorInteraction = {
+      totalMessages: mentorFeedback.length,
+      averageResponseTime: 0,
+      qaSessions: 0,
+      satisfactionScore
+    };
+
+    // ==================== PERFORMANCE & ASSESSMENT ====================
+    
+    // Calculate quiz scores based on actual submissions
+    const quizScores = [];
+    for (const task of tasks.filter(t => t.contentType === 'quiz')) {
+      const taskSubmissions = await Submission.find({ taskId: task._id });
+      
+      if (taskSubmissions.length > 0) {
+        const totalScore = taskSubmissions.reduce((sum, sub) => sum + (sub.grade || 0), 0);
+        const averageScore = Math.round(totalScore / taskSubmissions.length);
+        
+        quizScores.push({
+          quiz: task.name,
+          average: averageScore,
+          attempts: taskSubmissions.length
+        });
       }
-    });
-    const avgTimeMs = completedCount === 0 ? 0 : totalTime / completedCount;
-    const avgTimeDays = avgTimeMs ? Math.round(avgTimeMs / (1000 * 60 * 60 * 24)) : 0;
-    // ENGAGEMENT & INTERACTION (mocked for now)
-    const userActivity = enrollmentOverTimeArr.map(e => ({ date: e.date, activeUsers: Math.floor(Math.random() * totalEnrolled) }));
-    const contentInteraction = batch.tasks.map(t => ({ type: t.contentType, title: t.name, views: Math.floor(Math.random() * 100) }));
-    const forum = { posts: Math.floor(Math.random() * 100), replies: Math.floor(Math.random() * 200), activeThreads: Math.floor(Math.random() * 10) };
-    const mentorInteraction = { messages: Math.floor(Math.random() * 50), qaSessions: Math.floor(Math.random() * 10), averageRating: 4.5 };
-    // PERFORMANCE & ASSESSMENT (mocked for now)
-    const quizScores = batch.tasks.filter(t => t.contentType === 'quiz').map(t => ({ quiz: t.name, averageScore: Math.floor(Math.random() * 100) }));
-    const assignmentScores = batch.tasks.filter(t => t.contentType === 'assignment').map(t => ({ assignment: t.name, averageScore: Math.floor(Math.random() * 100) }));
-    const userProgress = batch.users.map(u => {
-      const completedTaskIds = (u.completedTasks || []).map(t => t.task?.toString());
+    }
+
+    // Calculate assignment scores based on actual submissions
+    const assignmentScores = [];
+    for (const task of tasks.filter(t => t.contentType === 'assignment')) {
+      const taskSubmissions = await Submission.find({ taskId: task._id });
+      
+      if (taskSubmissions.length > 0) {
+        const totalScore = taskSubmissions.reduce((sum, sub) => sum + (sub.grade || 0), 0);
+        const averageScore = Math.round(totalScore / taskSubmissions.length);
+        
+        assignmentScores.push({
+          assignment: task.name,
+          average: averageScore,
+          submissions: taskSubmissions.length
+        });
+      }
+    }
+
+    // Individual student progress data
+    const individualProgress = userProgressData.map(progress => {
+      const lastActivity = progress.activityLog.length > 0 
+        ? progress.activityLog[progress.activityLog.length - 1].timestamp
+        : progress.createdAt || new Date();
+
       return {
-        userId: u._id,
-        name: u.username,
-        progress: batch.tasks.length === 0 ? 0 : Math.round((completedTaskIds.length / batch.tasks.length) * 100),
-        score: Math.floor(Math.random() * 100),
-        completed: completedTaskIds.length === batch.tasks.length
+        id: progress.userId._id,
+        name: progress.userId.username,
+        progress: Math.round(progress.progressMetrics.completionPercentage || 0),
+        score: Math.round(progress.progressMetrics.averageGrade || 0),
+        lastActive: new Date(lastActivity).toISOString().split('T')[0]
       };
     });
-    const dropOffPoints = batch.tasks.map((t, i) => ({ module: t.name, dropOffCount: Math.floor(Math.random() * 5) }));
-    // RESPONSE
+
+    // Response in the format expected by frontend
     res.json({
       enrollment: {
-        enrollmentOverTime: enrollmentOverTimeArr,
-        totalEnrolled,
+        enrollmentRate,
         completionRate,
-        courseProgressDistribution: [
-          { range: '0-25%', count: courseProgressDistribution[0] },
-          { range: '26-50%', count: courseProgressDistribution[1] },
-          { range: '51-75%', count: courseProgressDistribution[2] },
-          { range: '76-100%', count: courseProgressDistribution[3] }
-        ],
-        averageTimeToCompletion: avgTimeDays + ' days'
+        averageTimeToCompletion,
+        totalEnrolled,
+        totalCompleted: completedUsers
       },
       engagement: {
         userActivity,
         contentInteraction,
-        forum,
+        forumAnalytics,
         mentorInteraction
       },
       performance: {
         quizScores,
         assignmentScores,
-        userProgress,
-        dropOffPoints
+        individualProgress
       }
     });
   } catch (error) {

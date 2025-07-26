@@ -13,7 +13,7 @@ import {
 } from 'react-icons/fa';
 import { FaStar as StarIcon } from 'react-icons/fa';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Area, RadialBarChart, RadialBar, Legend, Cell, LabelList
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Area, RadialBarChart, RadialBar, Legend, Cell, LabelList, PieChart, Pie, AreaChart
 } from 'recharts';
 import Cookies from 'js-cookie';
 import axios from 'axios';
@@ -70,10 +70,7 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
   const [feedbackToast, setFeedbackToast] = useState("");
 
-  // --- ADMIN ANALYTICS STATE ---
-  const [adminAnalytics, setAdminAnalytics] = useState(null);
-  const [adminLoading, setAdminLoading] = useState(false);
-  const [adminError, setAdminError] = useState("");
+
 
   // --- MENTOR ANALYTICS STATE ---
   const [mentorAnalytics, setMentorAnalytics] = useState(null);
@@ -240,36 +237,32 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
     }).catch(() => setFeedbackLoading(false));
   }, []);
 
-  // ... existing useEffect for admin and mentor analytics
-  useEffect(() => {
-    if (mode === 'admin' && batchData?._id) {
-      setAdminLoading(true);
-      setAdminError("");
-      axios.get(`http://localhost:3001/api/batches/${batchData._id}/analytics/admin`, { withCredentials: true })
-        .then(res => {
-          setAdminAnalytics(res.data);
-          setAdminLoading(false);
-        })
-        .catch(err => {
-          setAdminError('Failed to load admin analytics.');
-          setAdminLoading(false);
-        });
-    }
-  }, [mode, batchData?._id]);
+
 
   useEffect(() => {
     if (mode === 'mentor' && batchData?._id) {
       setMentorLoading(true);
       setMentorError("");
-      axios.get(`http://localhost:3001/api/batches/${batchData._id}/analytics/mentor`, { withCredentials: true })
-        .then(res => {
-          setMentorAnalytics(res.data);
-          setMentorLoading(false);
-        })
-        .catch(err => {
-          setMentorError('Failed to load mentor analytics.');
-          setMentorLoading(false);
+      
+      // Fetch all mentor analytics data from the correct endpoints
+      Promise.all([
+        axios.get(`http://localhost:3001/api/mentor/batch/${batchData._id}/student-progress`, { withCredentials: true }),
+        axios.get(`http://localhost:3001/api/mentor/batch/${batchData._id}/engagement`, { withCredentials: true }),
+        axios.get(`http://localhost:3001/api/mentor/batch/${batchData._id}/task-management`, { withCredentials: true })
+      ])
+      .then(([progressRes, engagementRes, taskRes]) => {
+        setMentorAnalytics({
+          studentProgress: progressRes.data,
+          engagement: engagementRes.data,
+          taskManagement: taskRes.data
         });
+        setMentorLoading(false);
+      })
+      .catch(err => {
+        console.error('Mentor analytics error:', err);
+        setMentorError('Failed to load mentor analytics.');
+        setMentorLoading(false);
+      });
     }
   }, [mode, batchData?._id]);
 
@@ -872,21 +865,1139 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
     );
   };
 
-  // For admin/mentor modes, return early
-  if (mode === 'admin') {
+  // Comprehensive Admin Analytics Component
+  function AdminAnalytics({ batchData }) {
+    const [adminAnalytics, setAdminAnalytics] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [selectedSection, setSelectedSection] = useState('enrollment');
+    const [selectedUser, setSelectedUser] = useState(null);
+    const [showUserModal, setShowUserModal] = useState(false);
+
+    // Fetch comprehensive admin analytics data
+    useEffect(() => {
+      if (!batchData?._id) return;
+      
+      setLoading(true);
+      setError(null);
+      
+      const batchId = batchData._id;
+      const token = Cookies.get('authToken');
+      
+      // Fetch all analytics data
+      Promise.all([
+        axios.get(`http://localhost:3001/api/analytics/batch/${batchId}/enrollment`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get(`http://localhost:3001/api/analytics/batch/${batchId}/engagement`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get(`http://localhost:3001/api/analytics/batch/${batchId}/performance`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      ])
+      .then(([enrollmentRes, engagementRes, performanceRes]) => {
+        setAdminAnalytics({
+          enrollment: enrollmentRes.data,
+          engagement: engagementRes.data,
+          performance: performanceRes.data
+        });
+        setLoading(false);
+      })
+      .catch(error => {
+        console.error('Failed to fetch admin analytics:', error);
+        setError('Failed to load analytics data. Please check your connection and try again.');
+        setLoading(false);
+      });
+    }, [batchData?._id]);
+
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4"></div>
+            <div className="text-lg text-gray-500">Loading analytics...</div>
+          </div>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="text-red-500 text-lg mb-4">{error}</div>
+          </div>
+        </div>
+      );
+    }
+
+    const sections = [
+      { id: 'enrollment', title: 'Enrollment & Completion', icon: '📊', color: 'from-blue-500 to-indigo-600' },
+      { id: 'engagement', title: 'Engagement & Interaction', icon: '🎯', color: 'from-green-500 to-emerald-600' },
+      { id: 'performance', title: 'Performance & Assessment', icon: '🏆', color: 'from-purple-500 to-violet-600' }
+    ];
+
+    const renderEnrollmentSection = () => (
+      <div className="space-y-6 sm:space-y-8">
+        {/* Key Metrics Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6">
+          <motion.div
+            whileHover={{ scale: 1.02 }}
+            className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white p-4 sm:p-6 rounded-xl shadow-lg"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm opacity-90">Total Enrolled</p>
+                <p className="text-2xl sm:text-3xl font-bold">{adminAnalytics.enrollment.totalEnrolled}</p>
+              </div>
+              <FaUsers className="text-2xl sm:text-3xl opacity-80" />
+            </div>
+          </motion.div>
+          
+          <motion.div
+            whileHover={{ scale: 1.02 }}
+            className="bg-gradient-to-r from-green-500 to-emerald-600 text-white p-4 sm:p-6 rounded-xl shadow-lg"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm opacity-90">Completion Rate</p>
+                <p className="text-2xl sm:text-3xl font-bold">{adminAnalytics.enrollment.completionRate}%</p>
+              </div>
+              <FaCheckCircle className="text-2xl sm:text-3xl opacity-80" />
+            </div>
+          </motion.div>
+          
+          <motion.div
+            whileHover={{ scale: 1.02 }}
+            className="bg-gradient-to-r from-purple-500 to-violet-600 text-white p-4 sm:p-6 rounded-xl shadow-lg"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm opacity-90">Avg. Time to Complete</p>
+                <p className="text-2xl sm:text-3xl font-bold">{adminAnalytics.enrollment.averageTimeToCompletion}</p>
+                <p className="text-xs opacity-75">days</p>
+              </div>
+              <FaClock className="text-2xl sm:text-3xl opacity-80" />
+            </div>
+          </motion.div>
+          
+          <motion.div
+            whileHover={{ scale: 1.02 }}
+            className="bg-gradient-to-r from-orange-500 to-red-600 text-white p-4 sm:p-6 rounded-xl shadow-lg"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm opacity-90">Total Completed</p>
+                <p className="text-2xl sm:text-3xl font-bold">{adminAnalytics.enrollment.totalCompleted}</p>
+              </div>
+              <FaTrophy className="text-2xl sm:text-3xl opacity-80" />
+            </div>
+          </motion.div>
+        </div>
+
+        {/* Enrollment Rate Over Time */}
+        <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6">
+          <h3 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4 text-gray-800 flex items-center gap-2">
+            <FaChartLine className="text-blue-500 text-lg sm:text-xl" />
+            <span className="text-sm sm:text-base lg:text-xl">Enrollment Rate Over Time</span>
+          </h3>
+          <ResponsiveContainer width="100%" height={250} className="sm:h-[300px]">
+            <AreaChart data={adminAnalytics.enrollment.enrollmentRate}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="date" fontSize={12} />
+              <YAxis fontSize={12} />
+              <Tooltip />
+              <Area type="monotone" dataKey="enrolled" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.3} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+
+      </div>
+    );
+
+    const renderEngagementSection = () => (
+      <div className="space-y-6 sm:space-y-8">
+        {/* Key Metrics Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6">
+          <motion.div
+            whileHover={{ scale: 1.02 }}
+            className="bg-gradient-to-r from-green-500 to-emerald-600 text-white p-4 sm:p-6 rounded-xl shadow-lg"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm opacity-90">Avg. Daily Active Users</p>
+                <p className="text-2xl sm:text-3xl font-bold">
+                  {Math.round(adminAnalytics.engagement.userActivity.reduce((acc, day) => acc + day.active, 0) / adminAnalytics.engagement.userActivity.length)}
+                </p>
+              </div>
+              <FaUsers className="text-2xl sm:text-3xl opacity-80" />
+            </div>
+          </motion.div>
+          
+          <motion.div
+            whileHover={{ scale: 1.02 }}
+            className="bg-gradient-to-r from-blue-500 to-cyan-600 text-white p-4 sm:p-6 rounded-xl shadow-lg"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm opacity-90">Forum Posts</p>
+                <p className="text-2xl sm:text-3xl font-bold">{adminAnalytics.engagement.forumAnalytics.totalPosts}</p>
+              </div>
+              <FaClipboardList className="text-2xl sm:text-3xl opacity-80" />
+            </div>
+          </motion.div>
+          
+          <motion.div
+            whileHover={{ scale: 1.02 }}
+            className="bg-gradient-to-r from-purple-500 to-violet-600 text-white p-4 sm:p-6 rounded-xl shadow-lg"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm opacity-90">Mentor Messages</p>
+                <p className="text-2xl sm:text-3xl font-bold">{adminAnalytics.engagement.mentorInteraction.totalMessages}</p>
+              </div>
+              <FaEdit className="text-2xl sm:text-3xl opacity-80" />
+            </div>
+          </motion.div>
+          
+          <motion.div
+            whileHover={{ scale: 1.02 }}
+            className="bg-gradient-to-r from-yellow-500 to-orange-600 text-white p-4 sm:p-6 rounded-xl shadow-lg"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm opacity-90">Mentor Satisfaction</p>
+                <p className="text-2xl sm:text-3xl font-bold">{adminAnalytics.engagement.mentorInteraction.satisfactionScore}</p>
+                <p className="text-xs opacity-75">/5.0</p>
+              </div>
+              <FaStar className="text-2xl sm:text-3xl opacity-80" />
+            </div>
+          </motion.div>
+        </div>
+
+        {/* User Activity Over Time */}
+        <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6">
+          <h3 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4 text-gray-800 flex items-center gap-2">
+            <FaFire className="text-orange-500 text-lg sm:text-xl" />
+            <span className="text-sm sm:text-base lg:text-xl">Daily Active Users</span>
+          </h3>
+          <ResponsiveContainer width="100%" height={250} className="sm:h-[300px]">
+            <LineChart data={adminAnalytics.engagement.userActivity}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="date" fontSize={12} />
+              <YAxis fontSize={12} />
+              <Tooltip />
+              <Line type="monotone" dataKey="active" stroke="#10b981" strokeWidth={2} dot={{ fill: '#10b981', strokeWidth: 2, r: 4 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Content Interaction */}
+        <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6">
+          <h3 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4 text-gray-800 flex items-center gap-2">
+            <FaClipboardList className="text-blue-500 text-lg sm:text-xl" />
+            <span className="text-sm sm:text-base lg:text-xl">Content Interaction Analysis</span>
+          </h3>
+          <ResponsiveContainer width="100%" height={250} className="sm:h-[300px]">
+            <BarChart data={adminAnalytics.engagement.contentInteraction} layout="horizontal">
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis type="number" fontSize={12} />
+              <YAxis dataKey="content" type="category" width={80} className="sm:w-120" fontSize={10} />
+              <Tooltip />
+              <Bar dataKey="views" radius={[0, 4, 4, 0]}>
+                {adminAnalytics.engagement.contentInteraction.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][index]} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Forum and Mentor Analytics */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
+          <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6">
+            <h3 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4 text-gray-800 flex items-center gap-2">
+              <FaEdit className="text-green-500 text-lg sm:text-xl" />
+              <span className="text-sm sm:text-base lg:text-xl">Forum Analytics</span>
+            </h3>
+            <div className="space-y-3 sm:space-y-4">
+              <div className="flex justify-between items-center p-2 sm:p-3 bg-green-50 rounded-lg">
+                <span className="text-sm sm:text-base font-medium sm:font-semibold text-green-700">Total Posts</span>
+                <span className="text-lg sm:text-2xl font-bold text-green-600">{adminAnalytics.engagement.forumAnalytics.totalPosts}</span>
+              </div>
+              <div className="flex justify-between items-center p-2 sm:p-3 bg-blue-50 rounded-lg">
+                <span className="text-sm sm:text-base font-medium sm:font-semibold text-blue-700">Total Replies</span>
+                <span className="text-lg sm:text-2xl font-bold text-blue-600">{adminAnalytics.engagement.forumAnalytics.totalReplies}</span>
+              </div>
+              <div className="flex justify-between items-center p-2 sm:p-3 bg-purple-50 rounded-lg">
+                <span className="text-sm sm:text-base font-medium sm:font-semibold text-purple-700">Active Discussions</span>
+                <span className="text-lg sm:text-2xl font-bold text-purple-600">{adminAnalytics.engagement.forumAnalytics.activeDiscussions}</span>
+              </div>
+              <div className="flex justify-between items-center p-2 sm:p-3 bg-yellow-50 rounded-lg">
+                <span className="text-sm sm:text-base font-medium sm:font-semibold text-yellow-700">Avg. Response Time</span>
+                <span className="text-lg sm:text-2xl font-bold text-yellow-600">{adminAnalytics.engagement.forumAnalytics.averageResponseTime}h</span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6">
+            <h3 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4 text-gray-800 flex items-center gap-2">
+              <FaStar className="text-yellow-500 text-lg sm:text-xl" />
+              <span className="text-sm sm:text-base lg:text-xl">Mentor Interaction</span>
+            </h3>
+            <div className="space-y-3 sm:space-y-4">
+              <div className="flex justify-between items-center p-2 sm:p-3 bg-blue-50 rounded-lg">
+                <span className="text-sm sm:text-base font-medium sm:font-semibold text-blue-700">Total Messages</span>
+                <span className="text-lg sm:text-2xl font-bold text-blue-600">{adminAnalytics.engagement.mentorInteraction.totalMessages}</span>
+              </div>
+              <div className="flex justify-between items-center p-2 sm:p-3 bg-green-50 rounded-lg">
+                <span className="text-sm sm:text-base font-medium sm:font-semibold text-green-700">Avg. Response Time</span>
+                <span className="text-lg sm:text-2xl font-bold text-green-600">{adminAnalytics.engagement.mentorInteraction.averageResponseTime}h</span>
+              </div>
+              <div className="flex justify-between items-center p-2 sm:p-3 bg-purple-50 rounded-lg">
+                <span className="text-sm sm:text-base font-medium sm:font-semibold text-purple-700">Q&A Sessions</span>
+                <span className="text-lg sm:text-2xl font-bold text-purple-600">{adminAnalytics.engagement.mentorInteraction.qaSessions}</span>
+              </div>
+              <div className="flex justify-between items-center p-2 sm:p-3 bg-yellow-50 rounded-lg">
+                <span className="text-sm sm:text-base font-medium sm:font-semibold text-yellow-700">Satisfaction Score</span>
+                <span className="text-lg sm:text-2xl font-bold text-yellow-600">{adminAnalytics.engagement.mentorInteraction.satisfactionScore}/5.0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+
+    const renderPerformanceSection = () => (
+      <div className="space-y-6 sm:space-y-8">
+        {/* Quiz and Assignment Scores */}
+        <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6">
+          <h3 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4 text-gray-800 flex items-center gap-2">
+            <FaTrophy className="text-yellow-500 text-lg sm:text-xl" />
+            <span className="text-sm sm:text-base lg:text-xl">Quiz & Assignment Performance</span>
+          </h3>
+          <ResponsiveContainer width="100%" height={250} className="sm:h-[300px]">
+            <BarChart data={adminAnalytics.performance.quizScores}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="quiz" fontSize={10} className="sm:text-xs" />
+              <YAxis fontSize={12} />
+              <Tooltip />
+              <Bar dataKey="average" radius={[4, 4, 0, 0]} fill="#8b5cf6" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Individual User Progress */}
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <h3 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
+            <FaUsers className="text-blue-500" />
+            Individual User Progress
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Progress</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Active</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {adminAnalytics.performance.individualProgress.map((user) => (
+                  <tr key={user.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-bold">
+                          {user.name.charAt(0)}
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">{user.name}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="w-full bg-gray-200 rounded-full h-2.5">
+                        <div 
+                          className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" 
+                          style={{ width: `${user.progress}%` }}
+                        ></div>
+                      </div>
+                      <span className="text-sm text-gray-600 mt-1">{user.progress}%</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        {user.score}%
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {user.lastActive}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <button
+                        onClick={() => { setSelectedUser(user); setShowUserModal(true); }}
+                        className="text-indigo-600 hover:text-indigo-900"
+                      >
+                        View Details
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+
+      </div>
+    );
+
     return (
-      <div className="space-y-8">
-        <div className="text-center text-lg text-gray-500">Admin Analytics (placeholder)</div>
+      <div className="space-y-6">
+              {/* Navigation Tabs */}
+      <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+        {sections.map(section => (
+          <button
+            key={section.id}
+            onClick={() => setSelectedSection(section.id)}
+            className={`flex items-center justify-center sm:justify-start gap-2 px-3 sm:px-4 py-3 sm:py-2 rounded-lg font-medium sm:font-semibold transition-all text-sm sm:text-base ${
+              selectedSection === section.id
+                ? `bg-gradient-to-r ${section.color} text-white shadow-lg`
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 active:bg-gray-300'
+            }`}
+          >
+            <span className="text-lg sm:text-lg">{section.icon}</span>
+            <span className="hidden sm:inline">{section.title}</span>
+            <span className="sm:hidden text-xs font-medium">{section.title.split(' ')[0]}</span>
+          </button>
+        ))}
+      </div>
+
+        {/* Content */}
+        <motion.div
+          key={selectedSection}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          {selectedSection === 'enrollment' && renderEnrollmentSection()}
+          {selectedSection === 'engagement' && renderEngagementSection()}
+          {selectedSection === 'performance' && renderPerformanceSection()}
+        </motion.div>
+
+        {/* User Details Modal */}
+        {showUserModal && selectedUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-xs sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4 sm:mb-6">
+                <h2 className="text-lg sm:text-2xl font-bold text-gray-800">
+                  <span className="hidden sm:inline">Student Details: </span>
+                  <span className="sm:hidden">Student: </span>
+                  {selectedUser.name}
+                </h2>
+                <button
+                  onClick={() => setShowUserModal(false)}
+                  className="text-gray-400 hover:text-red-500 text-xl sm:text-2xl font-bold p-1"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <h3 className="font-semibold text-blue-700">Progress</h3>
+                    <p className="text-2xl font-bold text-blue-600">{selectedUser.progress}%</p>
+                  </div>
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <h3 className="font-semibold text-green-700">Average Score</h3>
+                    <p className="text-2xl font-bold text-green-600">{selectedUser.score}%</p>
+                  </div>
+                </div>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-gray-700">Last Active</h3>
+                  <p className="text-lg text-gray-600">{selectedUser.lastActive}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
-  
-  if (mode === 'mentor') {
+
+// Comprehensive Mentor Analytics Component
+function MentorAnalytics({ batchData }) {
+  const [mentorAnalytics, setMentorAnalytics] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selectedSection, setSelectedSection] = useState('studentProgress');
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [showStudentModal, setShowStudentModal] = useState(false);
+  const [showSubmissionModal, setShowSubmissionModal] = useState(false);
+  const [selectedSubmission, setSelectedSubmission] = useState(null);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [gradeInput, setGradeInput] = useState('');
+
+  // Fetch comprehensive mentor analytics data
+  useEffect(() => {
+    if (!batchData?._id) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    const batchId = batchData._id;
+    const token = Cookies.get('authToken');
+    
+    // Fetch all mentor analytics data
+    Promise.all([
+      axios.get(`http://localhost:3001/api/mentor/batch/${batchId}/student-progress`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }),
+      axios.get(`http://localhost:3001/api/mentor/batch/${batchId}/engagement`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }),
+      axios.get(`http://localhost:3001/api/mentor/batch/${batchId}/task-management`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+    ])
+    .then(([progressRes, engagementRes, taskRes]) => {
+      setMentorAnalytics({
+        studentProgress: progressRes.data,
+        engagement: engagementRes.data,
+        taskManagement: taskRes.data
+      });
+      setLoading(false);
+    })
+    .catch(error => {
+      console.error('Failed to fetch mentor analytics:', error);
+      setError('Failed to load mentor analytics data. Please check your connection and try again.');
+      setLoading(false);
+    });
+  }, [batchData?._id]);
+
+  const handleGradeSubmission = async (submissionId, grade, feedback) => {
+    try {
+      const token = Cookies.get('authToken');
+      await axios.post(`http://localhost:3001/api/mentor/grade-submission`, {
+        submissionId,
+        grade,
+        feedback
+      }, {
+        headers: { Authorization: `Bearer ${token}` },
+        withCredentials: true
+      });
+      
+      // Update local state
+      setMentorAnalytics(prev => ({
+        ...prev,
+        taskManagement: {
+          ...prev.taskManagement,
+          submissionTracker: prev.taskManagement.submissionTracker.map(sub =>
+            sub.id === submissionId 
+              ? { ...sub, grade: `${grade}%`, feedback, status: 'Graded', score: grade }
+              : sub
+          )
+        }
+      }));
+      
+      setShowSubmissionModal(false);
+      setGradeInput('');
+      setFeedbackText('');
+    } catch (error) {
+      console.error('Failed to grade submission:', error);
+    }
+  };
+
+  if (loading) {
     return (
-      <div className="space-y-8">
-        <div className="text-center text-lg text-gray-500">Mentor Analytics (placeholder)</div>
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4"></div>
+          <div className="text-lg text-gray-500">Loading mentor analytics...</div>
+        </div>
       </div>
     );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="text-red-500 text-lg mb-4">{error}</div>
+        </div>
+      </div>
+    );
+  }
+
+  const sections = [
+    { id: 'studentProgress', title: 'Student Progress', icon: '👥', color: 'from-blue-500 to-indigo-600' },
+    { id: 'engagement', title: 'Engagement & Communication', icon: '💬', color: 'from-green-500 to-emerald-600' },
+    { id: 'taskManagement', title: 'Task Management', icon: '📋', color: 'from-purple-500 to-violet-600' }
+  ];
+
+  const renderStudentProgressSection = () => (
+    <div className="space-y-6 sm:space-y-8">
+      {/* Student Overview Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6">
+        <motion.div
+          whileHover={{ scale: 1.02 }}
+          className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white p-4 sm:p-6 rounded-xl shadow-lg"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs sm:text-sm opacity-90">Total Students</p>
+              <p className="text-2xl sm:text-3xl font-bold">{mentorAnalytics.studentProgress.students.length}</p>
+            </div>
+            <FaUsers className="text-2xl sm:text-3xl opacity-80" />
+          </div>
+        </motion.div>
+        
+        <motion.div
+          whileHover={{ scale: 1.02 }}
+          className="bg-gradient-to-r from-green-500 to-emerald-600 text-white p-4 sm:p-6 rounded-xl shadow-lg"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs sm:text-sm opacity-90">Batch Average Progress</p>
+              <p className="text-2xl sm:text-3xl font-bold">{mentorAnalytics.studentProgress.batchAverage.progress}%</p>
+            </div>
+            <FaChartLine className="text-2xl sm:text-3xl opacity-80" />
+          </div>
+        </motion.div>
+        
+        <motion.div
+          whileHover={{ scale: 1.02 }}
+          className="bg-gradient-to-r from-purple-500 to-violet-600 text-white p-4 sm:p-6 rounded-xl shadow-lg"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs sm:text-sm opacity-90">Average Score</p>
+              <p className="text-2xl sm:text-3xl font-bold">{mentorAnalytics.studentProgress.batchAverage.averageScore}%</p>
+            </div>
+            <FaStar className="text-2xl sm:text-3xl opacity-80" />
+          </div>
+        </motion.div>
+        
+        <motion.div
+          whileHover={{ scale: 1.02 }}
+          className="bg-gradient-to-r from-orange-500 to-red-600 text-white p-4 sm:p-6 rounded-xl shadow-lg"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs sm:text-sm opacity-90">Completion Rate</p>
+              <p className="text-2xl sm:text-3xl font-bold">{mentorAnalytics.studentProgress.batchAverage.completionRate}%</p>
+            </div>
+            <FaCheckCircle className="text-2xl sm:text-3xl opacity-80" />
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Individual Student Profiles */}
+      <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6">
+        <h3 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4 text-gray-800 flex items-center gap-2">
+          <FaUsers className="text-blue-500 text-lg sm:text-xl" />
+          <span className="text-sm sm:text-base lg:text-xl">Individual Student Profiles</span>
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+          {mentorAnalytics.studentProgress.students.map((student) => (
+            <motion.div
+              key={student.id}
+              whileHover={{ scale: 1.03 }}
+              className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 sm:p-6 border border-gray-200 cursor-pointer"
+              onClick={() => { setSelectedStudent(student); setShowStudentModal(true); }}
+            >
+              <div className="flex items-center mb-3 sm:mb-4">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-bold text-base sm:text-lg">
+                  {student.name.charAt(0)}
+                </div>
+                <div className="ml-3">
+                  <h4 className="text-sm sm:text-base font-bold text-gray-800">{student.name}</h4>
+                  <p className="text-xs sm:text-sm text-gray-600">Last active: {student.lastActive}</p>
+                </div>
+              </div>
+              
+              <div className="space-y-2 sm:space-y-3">
+                <div>
+                  <div className="flex justify-between text-xs sm:text-sm font-medium text-gray-700 mb-1">
+                    <span>Progress</span>
+                    <span>{student.progress}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                      style={{ width: `${student.progress}%` }}
+                    ></div>
+                  </div>
+                </div>
+                
+                <div className="flex justify-between items-center">
+                  <span className="text-xs sm:text-sm text-gray-600">Avg. Score:</span>
+                  <span className="text-sm sm:text-base font-bold text-green-600">{student.averageScore}%</span>
+                </div>
+                
+                <div className="flex justify-between items-center">
+                  <span className="text-xs sm:text-sm text-gray-600">Engagement:</span>
+                  <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                    student.engagementLevel === 'High' ? 'bg-green-100 text-green-800' :
+                    student.engagementLevel === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-red-100 text-red-800'
+                  }`}>
+                    {student.engagementLevel}
+                  </span>
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+
+      {/* Quiz Analytics */}
+      <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6">
+        <h3 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4 text-gray-800 flex items-center gap-2">
+          <FaClipboardList className="text-purple-500 text-lg sm:text-xl" />
+          <span className="text-sm sm:text-base lg:text-xl">Quiz & Assignment Analytics</span>
+        </h3>
+        {mentorAnalytics.studentProgress.quizAnalytics.map((quiz, index) => (
+          <div key={index} className="mb-4 sm:mb-6">
+            <h4 className="text-base sm:text-lg font-semibold text-gray-700 mb-3 sm:mb-4">{quiz.quiz}</h4>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
+              <div>
+                <h5 className="text-sm sm:text-base font-medium text-gray-600 mb-2">Grade Distribution</h5>
+                <ResponsiveContainer width="100%" height={180} className="sm:h-[200px]">
+                  <BarChart data={quiz.gradeDistribution}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="grade" fontSize={10} />
+                    <YAxis fontSize={12} />
+                    <Tooltip />
+                    <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                      {quiz.gradeDistribution.map((entry, idx) => (
+                        <Cell key={`cell-${idx}`} fill={['#22c55e', '#65a30d', '#eab308', '#f97316', '#ef4444'][idx]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div>
+                <h5 className="text-sm sm:text-base font-medium text-gray-600 mb-2">Difficult Questions</h5>
+                <div className="space-y-2 sm:space-y-3">
+                  {quiz.difficultQuestions.map((q, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2 sm:p-3 bg-red-50 rounded-lg">
+                      <span className="text-xs sm:text-sm font-medium text-gray-700">{q.question}</span>
+                      <span className="text-xs sm:text-sm font-bold text-red-600">{q.correctRate}% correct</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+
+    </div>
+  );
+
+  const renderEngagementSection = () => (
+    <div className="space-y-6 sm:space-y-8">
+      {/* Engagement Level Overview */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+        {mentorAnalytics.engagement.engagementLevels.map((level, index) => (
+          <motion.div
+            key={level.level}
+            whileHover={{ scale: 1.02 }}
+            className="bg-white rounded-xl shadow-lg p-4 sm:p-6 border-l-4"
+            style={{ borderLeftColor: level.color }}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs sm:text-sm font-medium text-gray-600">{level.level} Engagement</p>
+                <p className="text-2xl sm:text-3xl font-bold" style={{ color: level.color }}>{level.count}</p>
+                <p className="text-xs text-gray-500">students</p>
+              </div>
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: `${level.color}20` }}>
+                <FaFire style={{ color: level.color }} className="text-lg sm:text-xl" />
+              </div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Batch Activity Feed */}
+      <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6">
+        <h3 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4 text-gray-800 flex items-center gap-2">
+          <FaFire className="text-orange-500 text-lg sm:text-xl" />
+          <span className="text-sm sm:text-base lg:text-xl">Real-time Activity Feed</span>
+        </h3>
+        <div className="space-y-4 max-h-96 overflow-y-auto">
+          {mentorAnalytics.engagement.activityFeed.map((activity) => (
+            <motion.div
+              key={activity.id}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="flex items-center p-4 bg-gray-50 rounded-lg border-l-4 border-blue-400"
+            >
+              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold mr-4">
+                {activity.student.charAt(0)}
+              </div>
+              <div className="flex-1">
+                <p className="text-sm">
+                  <span className="font-semibold text-gray-800">{activity.student}</span>
+                  <span className="text-gray-600"> {activity.action} </span>
+                  <span className="font-medium text-blue-600">{activity.item}</span>
+                </p>
+                <p className="text-xs text-gray-500">{new Date(activity.timestamp).toLocaleString()}</p>
+              </div>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{
+                backgroundColor: activity.type === 'lesson' ? '#10b98120' : 
+                               activity.type === 'task' ? '#f59e0b20' : '#8b5cf620'
+              }}>
+                {activity.type === 'lesson' && <FaGraduationCap className="text-green-600" />}
+                {activity.type === 'task' && <FaClipboardList className="text-yellow-600" />}
+                {activity.type === 'forum' && <FaEdit className="text-purple-600" />}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+
+      {/* Q&A Forum */}
+      <div className="bg-white rounded-xl shadow-lg p-6">
+        <h3 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
+          <FaEdit className="text-blue-500" />
+          Q&A / Doubt Forum
+        </h3>
+        <div className="space-y-4">
+          {mentorAnalytics.engagement.qnaForum.map((question) => (
+            <motion.div
+              key={question.id}
+              className={`p-4 rounded-lg border-l-4 ${
+                !question.answered 
+                  ? 'bg-red-50 border-red-400' 
+                  : 'bg-green-50 border-green-400'
+              }`}
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                      {question.student.charAt(0)}
+                    </div>
+                    <span className="font-semibold text-gray-800">{question.student}</span>
+                    {question.urgent && (
+                      <span className="px-2 py-1 bg-red-100 text-red-800 text-xs font-bold rounded-full">
+                        URGENT
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-gray-700 mb-2">{question.question}</p>
+                  <p className="text-xs text-gray-500">
+                    Asked: {new Date(question.timestamp).toLocaleString()}
+                    {question.answered && question.answerTimestamp && (
+                      <span className="ml-4 text-green-600">
+                        ✓ Answered: {new Date(question.answerTimestamp).toLocaleString()}
+                      </span>
+                    )}
+                  </p>
+                </div>
+                {!question.answered && (
+                  <button className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+                    Answer
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderTaskManagementSection = () => (
+    <div className="space-y-8">
+      {/* Lesson Engagement Analytics */}
+      <div className="bg-white rounded-xl shadow-lg p-6">
+        <h3 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
+          <FaGraduationCap className="text-green-500" />
+          Lesson Engagement Analytics
+        </h3>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div>
+            <h4 className="font-semibold text-gray-600 mb-3">Completion Rates</h4>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={mentorAnalytics.taskManagement.lessonEngagement}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="lesson" />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="completionRate" fill="#10b981" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div>
+            <h4 className="font-semibold text-gray-600 mb-3">Student Feedback Ratings</h4>
+            <div className="space-y-4">
+              {mentorAnalytics.taskManagement.lessonEngagement.map((lesson, index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <span className="font-medium text-gray-700">{lesson.lesson}</span>
+                  <div className="flex items-center gap-2">
+                    <FaStar className="text-yellow-500" />
+                    <span className="font-bold text-gray-800">{lesson.studentFeedback}</span>
+                    <span className="text-sm text-gray-600">({lesson.completedStudents}/{lesson.totalStudents})</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Task Submission Tracker */}
+      <div className="bg-white rounded-xl shadow-lg p-6">
+        <h3 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
+          <FaClipboardList className="text-blue-500" />
+          Task Submission Tracker
+        </h3>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Task</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Submitted</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grade</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {mentorAnalytics.taskManagement.submissionTracker.map((submission) => (
+                <tr key={submission.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">{submission.task}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-bold text-sm mr-3">
+                        {submission.student.charAt(0)}
+                      </div>
+                      <div className="text-sm font-medium text-gray-900">{submission.student}</div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      submission.status === 'Graded' ? 'bg-green-100 text-green-800' :
+                      submission.status === 'Submitted' ? 'bg-blue-100 text-blue-800' :
+                      submission.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {submission.status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {submission.submittedAt ? new Date(submission.submittedAt).toLocaleDateString() : '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {submission.grade ? (
+                      <span className="text-sm font-medium text-gray-900">{submission.grade}</span>
+                    ) : (
+                      <span className="text-sm text-gray-400">-</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    {submission.status === 'Submitted' && (
+                      <button
+                        onClick={() => {
+                          setSelectedSubmission(submission);
+                          setShowSubmissionModal(true);
+                        }}
+                        className="text-indigo-600 hover:text-indigo-900"
+                      >
+                        Grade
+                      </button>
+                    )}
+                    {submission.status === 'Graded' && (
+                      <button
+                        onClick={() => {
+                          setSelectedSubmission(submission);
+                          setGradeInput(submission.score?.toString() || '');
+                          setFeedbackText(submission.feedback || '');
+                          setShowSubmissionModal(true);
+                        }}
+                        className="text-green-600 hover:text-green-900"
+                      >
+                        View/Edit
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Navigation Tabs */}
+      <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+        {sections.map(section => (
+          <button
+            key={section.id}
+            onClick={() => setSelectedSection(section.id)}
+            className={`flex items-center justify-center sm:justify-start gap-2 px-3 sm:px-4 py-3 sm:py-2 rounded-lg font-medium sm:font-semibold transition-all text-sm sm:text-base ${
+              selectedSection === section.id
+                ? `bg-gradient-to-r ${section.color} text-white shadow-lg`
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 active:bg-gray-300'
+            }`}
+          >
+            <span className="text-lg sm:text-lg">{section.icon}</span>
+            <span className="hidden sm:inline">{section.title}</span>
+            <span className="sm:hidden text-xs font-medium">{section.title.split(' ')[0]}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Content */}
+      <motion.div
+        key={selectedSection}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        {selectedSection === 'studentProgress' && renderStudentProgressSection()}
+        {selectedSection === 'engagement' && renderEngagementSection()}
+        {selectedSection === 'taskManagement' && renderTaskManagementSection()}
+      </motion.div>
+
+      {/* Student Details Modal */}
+      {showStudentModal && selectedStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-xs sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4 sm:mb-6">
+              <h2 className="text-lg sm:text-2xl font-bold text-gray-800">
+                <span className="hidden sm:inline">Student Profile: </span>
+                <span className="sm:hidden">Profile: </span>
+                {selectedStudent.name}
+              </h2>
+              <button
+                onClick={() => setShowStudentModal(false)}
+                className="text-gray-400 hover:text-red-500 text-xl sm:text-2xl font-bold p-1"
+              >
+                ×
+              </button>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-blue-700">Overall Progress</h3>
+                  <p className="text-2xl font-bold text-blue-600">{selectedStudent.progress}%</p>
+                  <div className="w-full bg-blue-200 rounded-full h-2 mt-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                      style={{ width: `${selectedStudent.progress}%` }}
+                    ></div>
+                  </div>
+                </div>
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-green-700">Average Score</h3>
+                  <p className="text-2xl font-bold text-green-600">{selectedStudent.averageScore}%</p>
+                </div>
+                <div className="bg-purple-50 p-4 rounded-lg">
+                  <h3 className="font-semibold text-purple-700">Lessons Completed</h3>
+                  <p className="text-2xl font-bold text-purple-600">{selectedStudent.completedLessons}/{selectedStudent.totalLessons}</p>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <h3 className="font-semibold text-gray-700">Quiz Scores</h3>
+                <div className="space-y-2">
+                  {selectedStudent.quizScores.map((quiz, index) => (
+                    <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
+                      <span className="font-medium text-gray-700">{quiz.quiz}</span>
+                      <span className="font-bold text-green-600">{quiz.score}/{quiz.maxScore}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Grading Modal */}
+      {showSubmissionModal && selectedSubmission && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-4 sm:p-6 w-full max-w-xs sm:max-w-2xl">
+            <div className="flex justify-between items-center mb-4 sm:mb-6">
+              <h2 className="text-lg sm:text-2xl font-bold text-gray-800">Grade Submission</h2>
+              <button
+                onClick={() => setShowSubmissionModal(false)}
+                className="text-gray-400 hover:text-red-500 text-xl sm:text-2xl font-bold p-1"
+              >
+                ×
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <h3 className="font-semibold text-gray-700">Task: {selectedSubmission.task}</h3>
+                <p className="text-gray-600">Student: {selectedSubmission.student}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Grade</label>
+                <input
+                  type="number"
+                  value={gradeInput}
+                  onChange={(e) => setGradeInput(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter grade (0-100)"
+                  min="0"
+                  max="100"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Feedback</label>
+                <textarea
+                  value={feedbackText}
+                  onChange={(e) => setFeedbackText(e.target.value)}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter your feedback for the student..."
+                />
+              </div>
+              <div className="flex gap-4 pt-4">
+                <button
+                  onClick={() => handleGradeSubmission(selectedSubmission.id, parseInt(gradeInput), feedbackText)}
+                  className="flex-1 bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors"
+                  disabled={!gradeInput.trim()}
+                >
+                  Save Grade
+                </button>
+                <button
+                  onClick={() => setShowSubmissionModal(false)}
+                  className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+  // For admin mode, return comprehensive analytics
+  if (mode === 'admin') {
+    return <AdminAnalytics batchData={batchData} />;
+  }
+  
+  if (mode === 'mentor') {
+    return <MentorAnalytics batchData={batchData} />;
   }
 
   return (

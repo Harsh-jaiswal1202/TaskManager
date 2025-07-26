@@ -309,25 +309,40 @@ export const submitTask = async (req, res) => {
       
       if (!userProgress) {
         console.log('🔍 DEBUG: Creating new UserBatchProgress record');
-        // Create new progress record
+        
+        // Get all tasks in this batch to properly initialize
+        const batchWithTasks = await Batch.findById(relevantBatch._id).populate('tasks');
+        
+        // Create task progress entries for all tasks in the batch
+        const taskProgress = batchWithTasks.tasks.map(batchTask => ({
+          taskId: batchTask._id,
+          status: String(batchTask._id) === String(id) ? 'submitted' : 'not_started',
+          submissionId: String(batchTask._id) === String(id) ? submission._id : null,
+          submittedAt: String(batchTask._id) === String(id) ? new Date() : null,
+          pointsEarned: String(batchTask._id) === String(id) ? (task.points || 50) : 0,
+          attempts: String(batchTask._id) === String(id) ? 1 : 0
+        }));
+
+        // Create new progress record with proper initialization
         userProgress = new UserBatchProgress({
           userId,
           batchId: relevantBatch._id,
           enrolledAt: new Date(),
-          taskProgress: [],
+          taskProgress,
           progressMetrics: {
-            totalTasks: 0,
+            totalTasks: batchWithTasks.tasks.length,
             completedTasks: 0,
-            submittedTasks: 0,
+            submittedTasks: 1, // Current submission
             gradedTasks: 0,
-            totalPointsEarned: 0,
-            completionPercentage: 0,
+            totalPointsEarned: task.points || 50,
+            completionPercentage: Math.round((1 / batchWithTasks.tasks.length) * 100),
             averageGrade: 0
           },
           activityLog: [],
-          lastActiveAt: new Date()
+          lastActiveAt: new Date(),
+          status: 'active'
         });
-        console.log('✅ DEBUG: UserBatchProgress created');
+        console.log('✅ DEBUG: UserBatchProgress created with proper initialization');
       } else {
         console.log('✅ DEBUG: Found existing UserBatchProgress');
       }
@@ -343,16 +358,21 @@ export const submitTask = async (req, res) => {
         existingTaskProgress.submissionId = submission._id;
         existingTaskProgress.submittedAt = new Date();
         existingTaskProgress.attempts += 1;
+        // Make sure to update points earned
+        existingTaskProgress.pointsEarned = task.points || 50;
+        console.log(`✅ Updated existing task progress: ${task.points || 50} points`);
       } else {
         // Add new task progress
-        userProgress.taskProgress.push({
+        const newTaskProgress = {
           taskId: id,
           status: 'submitted',
           submissionId: submission._id,
           submittedAt: new Date(),
           pointsEarned: task.points || 50,
           attempts: 1
-        });
+        };
+        userProgress.taskProgress.push(newTaskProgress);
+        console.log(`✅ Added new task progress: ${task.points || 50} points`);
       }
       
       // Add activity log entry

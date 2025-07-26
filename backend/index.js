@@ -8,6 +8,8 @@ import UserRoutes from "./routes/UserRoutes.js";
 import BatchRoutes from "./routes/BatchRoutes.js";
 import FeedbackRoutes from "./routes/FeedbackRoutes.js";
 import BatchProgressRoutes from "./routes/BatchProgressRoutes.js";
+import AnalyticsRoutes from "./routes/analyticsRoutes.js";
+import MentorAnalyticsRoutes from "./routes/mentorAnalyticsRoutes.js";
 
 const app = express();
 
@@ -44,6 +46,8 @@ app.use("/api/user", UserRoutes);
 app.use("/api/batches", BatchRoutes);
 app.use("/api/feedback", FeedbackRoutes);
 app.use("/api/batch-progress", BatchProgressRoutes);
+app.use("/api/analytics", AnalyticsRoutes);
+app.use("/api/mentor", MentorAnalyticsRoutes);
 // Optional test route
 app.get("/", (req, res) => {
   res.send("API is working!");

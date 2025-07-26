@@ -192,7 +192,117 @@ export const getUserDashboard = async (req, res) => {
   try {
     const { userId } = req.params;
     
-    // Get user's active batches and their progress
+    // Get user's current XP from their profile
+    const user = await User.findById(userId).select('xps username displayName');
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    
+    // Find all batches where user is enrolled but might not have UserBatchProgress
+    const enrolledBatches = await Batch.find({ 
+      users: userId 
+    }).populate('tasks');
+    
+
+    
+    // Ensure UserBatchProgress exists for all enrolled batches
+    for (const batch of enrolledBatches) {
+      const existingProgress = await UserBatchProgress.findOne({ 
+        userId, 
+        batchId: batch._id 
+      });
+      
+      if (!existingProgress) {
+        
+        
+        // Create task progress entries for all tasks in the batch
+        const taskProgress = batch.tasks.map(task => ({
+          taskId: task._id,
+          status: 'not_started',
+          pointsEarned: 0,
+          attempts: 0
+        }));
+
+        // Create new progress record
+        const newProgress = new UserBatchProgress({
+          userId,
+          batchId: batch._id,
+          enrolledAt: new Date(),
+          taskProgress,
+          progressMetrics: {
+            totalTasks: batch.tasks.length,
+            completedTasks: 0,
+            submittedTasks: 0,
+            gradedTasks: 0,
+            totalPointsEarned: 0,
+            completionPercentage: 0,
+            averageGrade: 0
+          },
+          activityLog: [],
+          lastActiveAt: new Date(),
+          status: 'active'
+        });
+
+        // Add initial activity log entry
+        newProgress.addActivity(
+          'milestone_reached',
+          null,
+          `Auto-enrolled in batch: ${batch.name}`,
+          { 
+            batchName: batch.name, 
+            totalTasks: batch.tasks.length,
+            enrollmentDate: new Date()
+          }
+        );
+
+                 await newProgress.save();
+       } else {
+         // Update existing progress to ensure it has all tasks from the batch
+         const currentTaskIds = existingProgress.taskProgress.map(tp => tp.taskId.toString());
+         const batchTaskIds = batch.tasks.map(task => task._id.toString());
+         
+         // Add any missing tasks to the progress
+         for (const task of batch.tasks) {
+           if (!currentTaskIds.includes(task._id.toString())) {
+
+             existingProgress.taskProgress.push({
+               taskId: task._id,
+               status: 'not_started',
+               pointsEarned: 0,
+               attempts: 0
+             });
+           }
+         }
+         
+         // Check for existing submissions and update task progress accordingly
+         const userSubmissions = await Submission.find({ 
+           userId, 
+           taskId: { $in: batchTaskIds }
+         }).populate('taskId', 'points');
+         
+         for (const submission of userSubmissions) {
+           const taskProgress = existingProgress.taskProgress.find(
+             tp => tp.taskId.toString() === submission.taskId._id.toString()
+           );
+           
+           if (taskProgress && taskProgress.status === 'not_started') {
+             taskProgress.status = 'completed'; // Mark as completed for consistency
+             taskProgress.submissionId = submission._id;
+             taskProgress.submittedAt = submission.submittedAt;
+             taskProgress.completedAt = submission.submittedAt; // Use submission time as completion time
+                           taskProgress.pointsEarned = submission.taskId.points || 0;
+             taskProgress.attempts = 1;
+           }
+         }
+         
+         // Update progress metrics
+         existingProgress.progressMetrics.totalTasks = batch.tasks.length;
+         existingProgress.updateProgressMetrics();
+         await existingProgress.save();
+       }
+     }
+    
+    // Get user's active batches and their progress (refetch after potential creation)
     const userProgress = await UserBatchProgress.find({ 
       userId, 
       status: 'active' 
@@ -207,16 +317,44 @@ export const getUserDashboard = async (req, res) => {
       .sort({ submittedAt: -1 })
       .limit(10);
     
-    // Calculate overall stats
+    // Calculate overall stats with real batch-specific data
+    const totalTasksAcrossAllBatches = userProgress.reduce((sum, p) => {
+      return sum + p.progressMetrics.totalTasks;
+    }, 0);
+    
+    const totalCompletedTasks = userProgress.reduce((sum, p) => {
+      return sum + p.progressMetrics.completedTasks;
+    }, 0);
+    
+    const totalSubmittedTasks = userProgress.reduce((sum, p) => {
+      return sum + p.progressMetrics.submittedTasks;
+    }, 0);
+    
+    const batchPointsEarned = userProgress.reduce((sum, p) => {
+      return sum + p.progressMetrics.totalPointsEarned;
+    }, 0);
+
+    // Calculate current streak from all activity logs across all batches
+    const allActivityLogs = userProgress.reduce((allLogs, p) => {
+      return [...allLogs, ...(p.activityLog || [])];
+    }, []);
+    
+    const currentStreak = calculateUserStreak(allActivityLogs);
+
     const overallStats = {
       totalBatches: userProgress.length,
-      totalTasksAcrossAllBatches: userProgress.reduce((sum, p) => sum + p.progressMetrics.totalTasks, 0),
-      totalCompletedTasks: userProgress.reduce((sum, p) => sum + p.progressMetrics.completedTasks, 0),
-      totalPointsEarned: userProgress.reduce((sum, p) => sum + p.progressMetrics.totalPointsEarned, 0),
+      totalTasksAcrossAllBatches,
+      totalCompletedTasks,
+      totalSubmittedTasks,
+      totalPointsEarned: batchPointsEarned, // Use batch-specific XP, not overall user XP
+      userTotalXP: user.xps || 0, // Keep user total XP separate
+      currentStreak, // Add real-time streak calculation
       averageCompletionRate: userProgress.length > 0 
         ? Math.round(userProgress.reduce((sum, p) => sum + p.progressMetrics.completionPercentage, 0) / userProgress.length)
         : 0
     };
+    
+
     
     res.status(200).json({
       success: true,
@@ -224,6 +362,11 @@ export const getUserDashboard = async (req, res) => {
         overallStats,
         batchProgress: userProgress,
         recentSubmissions,
+        userProfile: {
+          username: user.username,
+          displayName: user.displayName,
+          totalXP: user.xps
+        },
         lastUpdated: new Date()
       }
     });
@@ -300,4 +443,195 @@ export const getUserNotifications = async (req, res) => {
       error: error.message 
     });
   }
+};
+
+// POST /api/batch-progress/submit-task - Handle task submission with real-time updates
+export const handleTaskSubmission = async (req, res) => {
+  try {
+    const { userId, taskId, batchId, submissionData } = req.body;
+    
+
+    
+    // Get the task details to get XP points
+    const task = await Task.findById(taskId);
+    if (!task) {
+      return res.status(404).json({ message: "Task not found" });
+    }
+    
+    // Find or create user batch progress
+    let userProgress = await UserBatchProgress.findOne({ userId, batchId });
+    if (!userProgress) {
+      // Create new progress record if it doesn't exist
+      const batch = await Batch.findById(batchId).populate('tasks');
+      const taskProgress = batch.tasks.map(t => ({
+        taskId: t._id,
+        status: t._id.toString() === taskId ? 'submitted' : 'not_started',
+                 pointsEarned: t._id.toString() === taskId ? (task.points || 0) : 0,
+        attempts: t._id.toString() === taskId ? 1 : 0
+      }));
+
+      userProgress = new UserBatchProgress({
+        userId,
+        batchId,
+        taskProgress,
+        progressMetrics: {
+          totalTasks: batch.tasks.length,
+          completedTasks: 0,
+          submittedTasks: 1,
+          gradedTasks: 0,
+                     totalPointsEarned: task.points || 0,
+          completionPercentage: 0,
+          averageGrade: 0
+        },
+        activityLog: [],
+        lastActiveAt: new Date(),
+        status: 'active'
+      });
+    }
+    
+    // Update task progress
+    const taskProgressIndex = userProgress.taskProgress.findIndex(
+      tp => tp.taskId.toString() === taskId
+    );
+    
+         if (taskProgressIndex !== -1) {
+       const taskProgress = userProgress.taskProgress[taskProgressIndex];
+       taskProgress.status = 'completed'; // Mark as completed instead of submitted
+       taskProgress.submittedAt = new Date();
+       taskProgress.completedAt = new Date(); // Add completion timestamp
+               taskProgress.pointsEarned = task.points || 0;
+       taskProgress.attempts = (taskProgress.attempts || 0) + 1;
+       
+       // If submission has a grade, apply it
+       if (submissionData && submissionData.grade) {
+         taskProgress.grade = submissionData.grade;
+         taskProgress.status = 'graded';
+       }
+     } else {
+               // Add new task progress if not found
+        userProgress.taskProgress.push({
+          taskId,
+          status: 'completed', // Mark as completed instead of submitted
+          submittedAt: new Date(),
+          completedAt: new Date(), // Add completion timestamp
+          pointsEarned: task.points || 0,
+          attempts: 1,
+          grade: submissionData?.grade || undefined
+        });
+     }
+    
+         // Add activity log entry for task completion
+     userProgress.addActivity(
+               'task_completed',
+        taskId,
+        `Completed task: ${task.name}`,
+        { 
+          taskName: task.name,
+          pointsEarned: task.points || 0,
+          completionTime: new Date(),
+          isFirstTaskOfDay: false // Will be calculated below
+        }
+     );
+    
+         // Calculate if this is the first task completion of the day for streak
+     const today = new Date().toDateString();
+     const todaysActivities = userProgress.activityLog.filter(log => {
+       return (log.action === 'task_completed') &&
+              new Date(log.timestamp).toDateString() === today;
+     });
+    
+    // If this is the first task of the day, it contributes to streak
+    const isFirstTaskOfDay = todaysActivities.length <= 1;
+         if (isFirstTaskOfDay) {
+       userProgress.activityLog[userProgress.activityLog.length - 1].metadata.isFirstTaskOfDay = true;
+     }
+    
+    // Update progress metrics
+    userProgress.updateProgressMetrics();
+    
+    // Update user's total XP
+    const user = await User.findById(userId);
+         if (user) {
+               user.xps = (user.xps || 0) + (task.points || 0);
+       await user.save();
+     }
+    
+    await userProgress.save();
+    
+    // Calculate current streak
+         const streak = calculateUserStreak(userProgress.activityLog);
+    
+    res.status(200).json({
+      success: true,
+      message: "Task submitted successfully",
+      data: {
+        taskProgress: userProgress.taskProgress.find(tp => tp.taskId.toString() === taskId),
+        progressMetrics: userProgress.progressMetrics,
+        currentStreak: streak,
+        pointsEarned: task.points || 0,
+        newTotalXP: user.xps,
+        isFirstTaskOfDay
+      }
+    });
+    
+  } catch (error) {
+    console.error("Error handling task submission:", error);
+    res.status(500).json({ 
+      message: "Failed to process task submission", 
+      error: error.message 
+    });
+  }
+};
+
+ // Helper function to calculate user streak from activity logs
+ const calculateUserStreak = (activityLog) => {
+   if (!activityLog || activityLog.length === 0) return 0;
+   
+   // Get all task completion activities that are first of the day
+   const relevantActivities = activityLog.filter(log => 
+     log.action === 'task_completed' &&
+     log.metadata?.isFirstTaskOfDay === true
+   );
+  
+  if (relevantActivities.length === 0) return 0;
+  
+  // Get unique dates (only first task of each day counts)
+  const uniqueDates = [...new Set(relevantActivities.map(activity => 
+    new Date(activity.timestamp).toDateString()
+  ))].sort((a, b) => new Date(b) - new Date(a)); // Sort newest first
+  
+  
+  
+  let streak = 0;
+  const today = new Date();
+  
+  // Check if we have activity today or yesterday to start streak
+  const todayStr = today.toDateString();
+  const yesterdayStr = new Date(today.getTime() - 24 * 60 * 60 * 1000).toDateString();
+  
+  let startDate = new Date();
+  if (uniqueDates.includes(todayStr)) {
+    // Start from today
+    startDate = today;
+  } else if (uniqueDates.includes(yesterdayStr)) {
+    // Start from yesterday
+    startDate = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+  } else {
+    // No recent activity, streak is 0
+    return 0;
+  }
+  
+  // Count consecutive days backwards
+  for (let i = 0; i < 365; i++) { // Max 365 days check
+    const checkDate = new Date(startDate.getTime() - i * 24 * 60 * 60 * 1000);
+    const checkDateStr = checkDate.toDateString();
+    
+         if (uniqueDates.includes(checkDateStr)) {
+       streak++;
+     } else {
+       break;
+     }
+  }
+  
+  return streak;
 };

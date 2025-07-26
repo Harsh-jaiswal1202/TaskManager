@@ -6,7 +6,8 @@ import {
   getRecentBatchActivity,
   initializeBatchProgress,
   getUserDashboard,
-  getUserNotifications
+  getUserNotifications,
+  handleTaskSubmission
 } from "../controllers/BatchProgress.js";
 
 const router = express.Router();
@@ -23,5 +24,6 @@ router.get("/activity/:batchId", getRecentBatchActivity); // Get recent activity
 
 // Progress management
 router.post("/initialize", initializeBatchProgress); // Initialize progress for user in batch
+router.post("/submit-task", handleTaskSubmission); // Handle task submission with real-time updates
 
 export default router;
