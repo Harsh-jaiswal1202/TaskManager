@@ -7,10 +7,10 @@ import { FaEdit, FaTrash, FaSave, FaTimes, FaRegCopy } from "react-icons/fa";
 import { AnimatePresence } from "framer-motion";
 import "../index.css";
 import axios from "axios";
-import { restrictMentor, deleteBatch, restrictUser } from '../services/api';
+import { apiService } from '../services/api.js';
+import { eventManager } from '../utils/eventManager.js';
 import EnhancedBatchModal from '../components/EnhancedBatchModal';
 import BatchAnalytics from '../components/BatchAnalytics';
-import api from '../services/api';
 import EnhancedTaskModal from '../components/EnhancedTaskModal';
 import PortalDropdown from "../components/PortalDropdown";
 
@@ -76,10 +76,10 @@ export default function Dashboard() {
   const fetchCurrentAdmin = async () => {
     try {
       // First, try to get the current user directly by ID
-      const userRes = await api.get(`/user/${parentId}`);
+      const userRes = await apiService.getUser(parentId);
       console.log('Current user from direct API call:', userRes.data);
       
-      const res = await api.get("/user/all");
+      const res = await apiService.getAllUsers();
       const superadmins = res.data.superadmins || [];
       const admins = res.data.admins || [];
       // Find the current admin by matching the parentId in both superadmins and admins
@@ -94,6 +94,8 @@ export default function Dashboard() {
     }
   };
 
+
+
   useEffect(() => {
     const id = Cookies.get("id");
     const designation = Cookies.get("designation");
@@ -102,15 +104,14 @@ export default function Dashboard() {
       return;
     }
     setLoading(true);
-    axios
-      .get("http://localhost:3001/api/categories/all", {
-        withCredentials: true,
-      })
+    apiService.getAllCategories()
       .then((res) => {
-        setCategories(res.data);
+        setCategories(Array.isArray(res.data) ? res.data : []);
         setLoading(false);
       })
       .catch((err) => {
+        console.error('Failed to fetch categories:', err);
+        setCategories([]);
         setLoading(false);
       });
     fetchCurrentAdmin();
@@ -148,7 +149,7 @@ export default function Dashboard() {
     };
 
     axios
-      .post("http://localhost:3001/api/categories/create", newCategory, {
+      .post("/api/categories/create", newCategory, {
         withCredentials: true,
       })
       .then((res) => {
@@ -173,7 +174,7 @@ export default function Dashboard() {
       };
 
       const res = await axios.patch(
-        `http://localhost:3001/api/categories/edit/${id}`,
+        `/api/categories/edit/${id}`,
         updatedCategory,
         { withCredentials: true }
       );
@@ -198,7 +199,7 @@ export default function Dashboard() {
 
   const handleDeleteCategory = async (id) => {
     try {
-      await axios.delete(`http://localhost:3001/api/categories/delete/${id}`, {
+      await axios.delete(`/api/categories/delete/${id}`, {
         withCredentials: true,
       });
 
@@ -214,7 +215,7 @@ export default function Dashboard() {
 
   const fetchMentors = async () => {
     try {
-      const res = await api.get("/user/all");
+      const res = await apiService.getAllUsers();
       setMentors(res.data.mentors || []);
     } catch (err) {
       // Optionally handle error
@@ -222,19 +223,17 @@ export default function Dashboard() {
   };
   const fetchBatches = async () => {
     try {
-      const token = Cookies.get('authToken');
-      const res = await axios.get(`http://localhost:3001/api/batches/`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setBatches(res.data);
+      const res = await apiService.getAllBatches();
+      setBatches(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
-      // Optionally handle error
+      console.error('Failed to fetch batches:', err);
+      setBatches([]);
     }
   };
   const [users, setUsers] = useState([]);
   const fetchUsers = async () => {
     try {
-      const res = await api.get("/user/all");
+      const res = await apiService.getAllUsers();
       setUsers(res.data.users || []);
     } catch (err) {
       // Optionally handle error
@@ -244,8 +243,8 @@ export default function Dashboard() {
   const fetchAllTasks = async () => {
     setTasksLoading(true);
     try {
-      const res = await axios.get("http://localhost:3001/api/tasks/all", { withCredentials: true });
-      setAllTasks(res.data || []);
+      const res = await apiService.getAllTasks();
+      setAllTasks(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error('Failed to fetch tasks:', err);
       setAllTasks([]);
@@ -255,12 +254,46 @@ export default function Dashboard() {
 
   const fetchCategories = async () => {
     try {
-      const res = await axios.get('http://localhost:3001/api/categories/all', { withCredentials: true });
-      setCategories(res.data || []);
+      const res = await apiService.getAllCategories();
+      setCategories(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
+      console.error('Failed to fetch categories:', err);
       setCategories([]);
     }
   };
+
+  // Real-time event listeners
+  useEffect(() => {
+    const handleTaskCreated = (data) => {
+      console.log('🔄 AdminDashboard received task created event:', data);
+      // Refresh tasks when a new task is created
+      fetchAllTasks();
+    };
+
+    const handleBatchCreated = (data) => {
+      console.log('🔄 AdminDashboard received batch created event:', data);
+      // Refresh batches when a new batch is created
+      fetchBatches();
+    };
+
+    const handleTaskCompleted = (data) => {
+      console.log('🔄 AdminDashboard received task completed event:', data);
+      // Refresh tasks when a task is completed
+      fetchAllTasks();
+    };
+
+    // Subscribe to events
+    const unsubscribeTaskCreated = eventManager.subscribe('taskCreated', handleTaskCreated);
+    const unsubscribeBatchCreated = eventManager.subscribe('batchCreated', handleBatchCreated);
+    const unsubscribeTaskCompleted = eventManager.subscribe('taskCompleted', handleTaskCompleted);
+
+    // Cleanup listeners on unmount
+    return () => {
+      unsubscribeTaskCreated();
+      unsubscribeBatchCreated();
+      unsubscribeTaskCompleted();
+    };
+  }, []);
 
   useEffect(() => {
     if (tab === 'mentors') fetchMentors();
@@ -273,7 +306,7 @@ export default function Dashboard() {
     setToggling((prev) => ({ ...prev, [mentorId]: true }));
     try {
       const token = Cookies.get('authToken');
-      await restrictMentor(mentorId, token);
+      await apiService.restrictMentor(mentorId, token);
       fetchMentors();
     } catch (err) {
       // Optionally handle error
@@ -284,7 +317,7 @@ export default function Dashboard() {
     setToggling((prev) => ({ ...prev, [batchId]: true }));
     try {
       const token = Cookies.get('authToken');
-      await deleteBatch(batchId, token);
+      await apiService.deleteBatch(batchId, token);
       fetchBatches();
     } catch (err) {
       // Optionally handle error
@@ -319,7 +352,7 @@ export default function Dashboard() {
     console.log('Current admin from DB:', currentAdmin);
     
     try {
-      const response = await axios.post("http://localhost:3001/api/batches/", {
+      const response = await axios.post("/api/batches/", {
         name: batchName,
         description: batchDescription.trim(),
         admin: adminId,
@@ -363,7 +396,7 @@ export default function Dashboard() {
     setEditLoading(true);
     try {
       const token = Cookies.get('authToken');
-      await axios.put(`http://localhost:3001/api/batches/${editBatchModal.batch._id}`, {
+              await axios.put(`/api/batches/${editBatchModal.batch._id}`, {
         name: editBatchModal.name,
         mentor: editBatchModal.mentor,
       }, { headers: { Authorization: `Bearer ${token}` } });
@@ -398,7 +431,7 @@ export default function Dashboard() {
         if (designation === 'superadmin' && data.admin) {
           updatePayload.admin = data.admin;
         }
-        await axios.put(`http://localhost:3001/api/batches/${data.batchId}`,
+        await axios.put(`/api/batches/${data.batchId}`,
           updatePayload,
           { headers: { Authorization: `Bearer ${token}` } }
         );
@@ -414,7 +447,7 @@ export default function Dashboard() {
         } else if (designation === 'admin') {
           createPayload.admin = parentId;
         }
-        await axios.post('http://localhost:3001/api/batches/', createPayload, { headers: { Authorization: `Bearer ${token}` } });
+        await axios.post('/api/batches/', createPayload, { headers: { Authorization: `Bearer ${token}` } });
       }
       setShowEnhancedBatchModal(false);
       setEditBatch(null);
@@ -432,7 +465,7 @@ export default function Dashboard() {
     console.log(userId);
     try {
       const token = Cookies.get('authToken');
-      await restrictUser(userId, token);
+      await apiService.restrictUser(userId, token);
       fetchUsers();
     } catch (err) {
       // Optionally handle error
@@ -456,7 +489,7 @@ export default function Dashboard() {
     if (!window.confirm('Are you sure you want to delete this task?')) return;
     setTaskModalLoading(true);
     try {
-      await axios.delete(`http://localhost:3001/api/task/delete/${taskId}`, { withCredentials: true });
+      await axios.delete(`/api/task/delete/${taskId}`, { withCredentials: true });
       fetchTasks();
     } catch (err) {}
     setTaskModalLoading(false);
@@ -467,9 +500,9 @@ export default function Dashboard() {
     setTaskModalError('');
     try {
       if (data.isEditMode && data.taskId) {
-        await axios.patch(`http://localhost:3001/api/task/edit/${data.taskId}`, data, { withCredentials: true });
+        await axios.patch(`/api/task/edit/${data.taskId}`, data, { withCredentials: true });
       } else {
-        await axios.post('http://localhost:3001/api/task/create', data, { withCredentials: true });
+                  await axios.post('/api/task/create', data, { withCredentials: true });
       }
       setShowEnhancedTaskModal(false);
       setEditTask(null);
@@ -498,7 +531,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (activePage === 'profile' || activePage === 'dashboard') {
       setProfileLoading(true);
-      axios.get(`http://localhost:3001/api/user/${userId}`)
+      axios.get(`/api/user/${userId}`)
         .then(res => {
           setProfileEdit({
             avatar: res.data.avatar || '',
@@ -533,7 +566,7 @@ export default function Dashboard() {
   const handleProfileSave = async () => {
     setProfileLoading(true);
     try {
-      await axios.patch(`http://localhost:3001/api/user/${userId}`, {
+      await axios.patch(`/api/user/${userId}`, {
         username: profileEdit.username,
         displayName: profileEdit.displayName,
         email: profileEdit.email,
@@ -671,7 +704,7 @@ export default function Dashboard() {
                       setAvatarDeleting(true);
                       try {
                         const token = Cookies.get('authToken');
-                        await axios.patch(`http://localhost:3001/api/user/${userId}`, { avatar: '' }, {
+                        await axios.patch(`/api/user/${userId}`, { avatar: '' }, {
                           headers: { Authorization: `Bearer ${token}` }
                         });
                       } catch (err) {
@@ -772,7 +805,7 @@ export default function Dashboard() {
                       setAvatarDeleting(true);
                       try {
                         const token = Cookies.get('authToken');
-                        await axios.patch(`http://localhost:3001/api/user/${userId}`, { avatar: '' }, {
+                        await axios.patch(`/api/user/${userId}`, { avatar: '' }, {
                           headers: { Authorization: `Bearer ${token}` }
                         });
                       } catch (err) {
@@ -957,26 +990,29 @@ export default function Dashboard() {
           <div className="w-full max-w-3xl mx-auto">
             <h2 className="text-xl font-bold mb-4 text-blue-700">Mentors</h2>
             <div className="space-y-4">
-              {mentors.length === 0 && <div className="text-gray-500">No mentors found.</div>}
-              {mentors.map((mentor) => (
-                <div key={mentor._id} className="flex items-center justify-between bg-gradient-to-r from-blue-100 to-purple-100 rounded-xl px-4 py-3 shadow border border-blue-200">
-                  <div>
-                    <div className="font-semibold text-blue-800">{mentor.username}</div>
-                    <div className="text-sm text-gray-600">{mentor.email}</div>
+              {!Array.isArray(mentors) || mentors.length === 0 ? (
+                <div className="text-gray-500">No mentors found.</div>
+              ) : (
+                mentors.map((mentor) => (
+                  <div key={mentor._id} className="flex items-center justify-between bg-gradient-to-r from-blue-100 to-purple-100 rounded-xl px-4 py-3 shadow border border-blue-200">
+                    <div>
+                      <div className="font-semibold text-blue-800">{mentor.username}</div>
+                      <div className="text-sm text-gray-600">{mentor.email}</div>
+                    </div>
+                    <button
+                      onClick={() => handleToggleMentorRestrict(mentor._id)}
+                      disabled={toggling[mentor._id]}
+                      className={`px-4 py-2 rounded-full font-semibold shadow transition-all text-sm sm:text-base focus:outline-none ${mentor.restricted ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-green-500 hover:bg-green-600 text-white'} ${toggling[mentor._id] ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    >
+                      {toggling[mentor._id]
+                        ? 'Updating...'
+                        : mentor.restricted
+                        ? 'Unrestrict'
+                        : 'Restrict'}
+                    </button>
                   </div>
-                  <button
-                    onClick={() => handleToggleMentorRestrict(mentor._id)}
-                    disabled={toggling[mentor._id]}
-                    className={`px-4 py-2 rounded-full font-semibold shadow transition-all text-sm sm:text-base focus:outline-none ${mentor.restricted ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-green-500 hover:bg-green-600 text-white'} ${toggling[mentor._id] ? 'opacity-60 cursor-not-allowed' : ''}`}
-                  >
-                    {toggling[mentor._id]
-                      ? 'Updating...'
-                      : mentor.restricted
-                      ? 'Unrestrict'
-                      : 'Restrict'}
-                  </button>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         )}
@@ -1000,7 +1036,7 @@ export default function Dashboard() {
               </button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
-              {batches.length === 0 ? (
+              {!Array.isArray(batches) || batches.length === 0 ? (
                 <div className="col-span-full text-center text-gray-500">No batches found.</div>
               ) : (
                 batches.map((batch) => (

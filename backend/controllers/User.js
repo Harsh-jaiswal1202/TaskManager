@@ -512,9 +512,11 @@ const updateUserBatchMood = async (req, res) => {
 const authenticateJWT = (req, res, next) => {
   // Try to get token from cookies first, then from Authorization header
   const token = req.cookies?.authToken || (req.headers.authorization && req.headers.authorization.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null);
+  
   if (!token) {
     return res.status(401).json({ message: 'No token provided' });
   }
+  
   jwt.verify(token, config.jwtSecret, (err, user) => {
     if (err) {
       return res.status(403).json({ message: 'Invalid token' });

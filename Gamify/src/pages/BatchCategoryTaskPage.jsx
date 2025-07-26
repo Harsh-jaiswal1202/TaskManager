@@ -52,7 +52,7 @@ export default function BatchCategoryTaskPage() {
           // Check submissions for each task
           Promise.all(
             taskIds.map(taskId => 
-              axios.get(`http://localhost:3001/api/tasks/submissions?taskId=${taskId}&userId=${userId}`, { withCredentials: true })
+              axios.get(`http://localhost:3001/api/task/submissions?taskId=${taskId}&userId=${userId}`, { withCredentials: true })
                 .then(submissionRes => ({ 
                   taskId, 
                   submitted: submissionRes.data.submission !== null, 
@@ -108,7 +108,7 @@ export default function BatchCategoryTaskPage() {
     if (!task) return;
     const userId = Cookies.get('id');
     try {
-      await axios.post(`http://localhost:3001/api/tasks/complete/${task._id}`, { userId });
+              await axios.post(`http://localhost:3001/api/task/complete/${task._id}`, { userId });
       setIsSubmitted(s => !s); // trigger reload
     } catch (err) {
       alert("Failed to mark task as complete.");
@@ -130,7 +130,7 @@ export default function BatchCategoryTaskPage() {
   const handleDeleteTask = async (taskId) => {
     setModalLoading(true);
     try {
-      await axios.delete(`http://localhost:3001/api/tasks/delete/${taskId}`, { withCredentials: true });
+      await axios.delete(`http://localhost:3001/api/task/delete/${taskId}`, { withCredentials: true });
       // Refresh tasks
       axios.get(`http://localhost:3001/api/categories/all/tasks/${categoryId}?batchId=${batchId}`)
         .then(res => setTasks(res.data.tasks || []));
@@ -143,10 +143,10 @@ export default function BatchCategoryTaskPage() {
     setModalError('');
     try {
       if (data.isEditMode && data.taskId) {
-        await axios.patch(`http://localhost:3001/api/tasks/edit/${data.taskId}`, data, { withCredentials: true });
+        await axios.patch(`http://localhost:3001/api/task/edit/${data.taskId}`, data, { withCredentials: true });
       } else {
         // Inject categoryId into the data for task creation
-        await axios.post('http://localhost:3001/api/tasks/create', { ...data, category: categoryId }, { withCredentials: true });
+        await axios.post('http://localhost:3001/api/task/create', { ...data, category: categoryId }, { withCredentials: true });
       }
       setShowTaskModal(false);
       setEditTask(null);

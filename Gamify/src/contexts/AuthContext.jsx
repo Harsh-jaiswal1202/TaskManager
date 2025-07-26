@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import Cookies from 'js-cookie';
+import { apiService } from '../services/api.js';
 
 const AuthContext = createContext();
 
@@ -10,28 +11,67 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     // Check for existing auth token
     const token = Cookies.get('authToken');
-    const userRole = Cookies.get('userRole');
+    const userId = Cookies.get('id');
+    const designation = Cookies.get('designation');
     
-    if (token && userRole) {
-      setUser({ role: userRole, token });
+    if (token && userId && designation) {
+      // Verify token with backend
+      apiService.verifyUser()
+      .then(response => {
+        setUser({ 
+          id: userId, 
+          role: designation, 
+          token,
+          ...response.data.user 
+        });
+      })
+      .catch(() => {
+        // Token invalid, clear cookies
+        Cookies.remove('authToken');
+        Cookies.remove('id');
+        Cookies.remove('designation');
+        setUser(null);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+    } else {
+      setLoading(false);
     }
-    
-    setLoading(false);
   }, []);
 
-  const login = (role) => {
-    // In a real app, this would be a proper JWT token from the server
-    const token = `mock-jwt-token-${role}-${Date.now()}`;
-    
-    Cookies.set('authToken', token, { expires: 7 });
-    Cookies.set('userRole', role, { expires: 7 });
-    
-    setUser({ role, token });
+  const login = async (credentials) => {
+    try {
+      const response = await apiService.login(credentials);
+      
+      const { token, userId, designation, user: userData } = response.data;
+      
+      Cookies.set('authToken', token, { expires: 7 });
+      Cookies.set('id', userId, { expires: 7 });
+      Cookies.set('designation', designation, { expires: 7 });
+      
+      setUser({ 
+        id: userId, 
+        role: designation, 
+        token,
+        ...userData 
+      });
+      
+      return { success: true };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error.response?.data?.message || 'Login failed' 
+      };
+    }
   };
 
   const logout = () => {
     Cookies.remove('authToken');
-    Cookies.remove('userRole');
+    Cookies.remove('id');
+    Cookies.remove('designation');
+    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
     setUser(null);
     window.location.href = '/login';
   };

@@ -1,277 +1,344 @@
-import React, { useState, useEffect, useRef } from "react";
-import { useSurvey } from "../contexts/SurveyContext";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-
-const categoryMap = {
-  1: "Health & Fitness",
-  2: "Productivity",
-  3: "Learning",
-  4: "Creativity",
-  5: "Mindfulness",
-  6: "Social Connection",
-  7: "Financial Planning",
-  8: "Daily Routine",
-};
+import axios from "axios";
+import Cookies from "js-cookie";
 
 export default function ResponsesPage() {
-  const [responses, setResponses] = useState([]);
+  const [achievements, setAchievements] = useState([]);
+  const [userStats, setUserStats] = useState({
+    totalXP: 0,
+    level: 1,
+    completedTasks: 0,
+    currentStreak: 0,
+    totalBatches: 0
+  });
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  const [showReward, setShowReward] = useState(false);
-  const [rewardType, setRewardType] = useState("");
-  const [currentLevel, setCurrentLevel] = useState(
-    Math.floor(responses.length / 5) + 1
-  );
-
-  const levelRef = useRef(currentLevel);
-
-  useEffect(() => {
-    const allTasks = [];
-
-    // Go through all localStorage keys
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key.startsWith("completedTasks-")) {
-        try {
-          const tasks = JSON.parse(localStorage.getItem(key));
-          allTasks.push(...tasks);
-        } catch (err) {
-          console.error("Error parsing", key, err);
-        }
-      }
+  // Define achievement badges
+  const achievementBadges = [
+    {
+      id: 'first_task',
+      name: 'First Steps',
+      description: 'Complete your first task',
+      icon: '🎯',
+      color: 'bg-blue-500',
+      unlocked: false,
+      requirement: 1
+    },
+    {
+      id: 'task_master',
+      name: 'Task Master',
+      description: 'Complete 10 tasks',
+      icon: '🏆',
+      color: 'bg-purple-500',
+      unlocked: false,
+      requirement: 10
+    },
+    {
+      id: 'streak_3',
+      name: 'Consistent Learner',
+      description: 'Maintain a 3-day streak',
+      icon: '🔥',
+      color: 'bg-orange-500',
+      unlocked: false,
+      requirement: 3
+    },
+    {
+      id: 'streak_7',
+      name: 'Week Warrior',
+      description: 'Maintain a 7-day streak',
+      icon: '⚡',
+      color: 'bg-yellow-500',
+      unlocked: false,
+      requirement: 7
+    },
+    {
+      id: 'xp_1000',
+      name: 'XP Collector',
+      description: 'Earn 1000 XP',
+      icon: '💎',
+      color: 'bg-green-500',
+      unlocked: false,
+      requirement: 1000
+    },
+    {
+      id: 'batch_complete',
+      name: 'Batch Champion',
+      description: 'Complete all tasks in a batch',
+      icon: '👑',
+      color: 'bg-red-500',
+      unlocked: false,
+      requirement: 1
+    },
+    {
+      id: 'perfect_score',
+      name: 'Perfect Score',
+      description: 'Get 100% on a task',
+      icon: '⭐',
+      color: 'bg-pink-500',
+      unlocked: false,
+      requirement: 1
+    },
+    {
+      id: 'early_bird',
+      name: 'Early Bird',
+      description: 'Complete a task before deadline',
+      icon: '🌅',
+      color: 'bg-indigo-500',
+      unlocked: false,
+      requirement: 1
     }
+  ];
 
-    // Optional: sort by completion date (latest first)
-    allTasks.sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
+  // Fetch user data and calculate achievements
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const userId = Cookies.get('id');
+        if (!userId) {
+          setLoading(false);
+          return;
+        }
 
-    setResponses(allTasks);
+        // Fetch user dashboard data
+        const response = await axios.get(`http://localhost:3001/api/batch-progress/dashboard/${userId}`, {
+          withCredentials: true
+        });
+
+        if (response.data.success) {
+          const dashboard = response.data.dashboard;
+          const stats = dashboard.overallStats;
+          
+          setUserStats({
+            totalXP: stats.totalPointsEarned || 0,
+            level: Math.floor((stats.totalPointsEarned || 0) / 1000) + 1,
+            completedTasks: stats.totalCompletedTasks || 0,
+            currentStreak: stats.currentStreak || 0,
+            totalBatches: stats.totalBatches || 0
+          });
+
+          // Calculate which achievements are unlocked
+          const unlockedAchievements = achievementBadges.map(badge => {
+            let unlocked = false;
+            
+            switch (badge.id) {
+              case 'first_task':
+                unlocked = stats.totalCompletedTasks >= 1;
+                break;
+              case 'task_master':
+                unlocked = stats.totalCompletedTasks >= 10;
+                break;
+              case 'streak_3':
+                unlocked = stats.currentStreak >= 3;
+                break;
+              case 'streak_7':
+                unlocked = stats.currentStreak >= 7;
+                break;
+              case 'xp_1000':
+                unlocked = stats.totalPointsEarned >= 1000;
+                break;
+              case 'batch_complete':
+                // Check if any batch is 100% complete
+                unlocked = dashboard.batchProgress.some(batch => 
+                  batch.progressMetrics.completionPercentage === 100
+                );
+                break;
+              case 'perfect_score':
+                // This would need to be tracked in task submissions
+                unlocked = false; // Placeholder
+                break;
+              case 'early_bird':
+                // This would need to be tracked in task submissions
+                unlocked = false; // Placeholder
+                break;
+              default:
+                unlocked = false;
+            }
+            
+            return { ...badge, unlocked };
+          });
+
+          setAchievements(unlockedAchievements);
+        }
+      } catch (error) {
+        console.error('Failed to fetch user data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUserData();
   }, []);
 
-  const triggerReward = (level) => {
-    const rewards = [
-      { type: "confetti", message: "Level Up! +100 XP Bonus" },
-      { type: "badge", message: "New Badge Unlocked!" },
-      { type: "streak", message: "3-Day Streak Bonus!" },
-      { type: "special", message: "Rare Item Found!" },
-    ];
-
-    const randomReward = rewards[Math.floor(Math.random() * rewards.length)];
-    setRewardType(randomReward.type);
-    setShowReward(true);
-
-    setTimeout(() => {
-      setShowReward(false);
-    }, 3000);
+  const getProgressToNextLevel = () => {
+    const currentLevelXP = (userStats.level - 1) * 1000;
+    const nextLevelXP = userStats.level * 1000;
+    const progress = userStats.totalXP - currentLevelXP;
+    const required = nextLevelXP - currentLevelXP;
+    return Math.min((progress / required) * 100, 100);
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-6 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4"></div>
+          <div className="text-lg text-gray-500">Loading your achievements...</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-100 via-purple-100 to-pink-200 p-4 sm:p-6">
-      <div className="max-w-3xl mx-auto bg-[var(--card-bg)] backdrop-blur-xl rounded-2xl p-4 sm:p-6 md:p-8 relative border-2 border-[var(--border-color)] shadow-lg overflow-hidden">
-        {/* Decorative Elements */}
-        <div className="absolute top-0 right-0 w-16 h-16 sm:w-24 sm:h-24 bg-yellow-400/20 rounded-bl-full"></div>
-        <div className="absolute bottom-0 left-0 w-12 h-12 sm:w-16 sm:h-16 bg-pink-400/20 rounded-tr-full"></div>
-
-        {/* Back Button */}
-        <button
-          onClick={() => navigate("/dashboard")}
-          className="absolute top-2 left-2 sm:top-4 sm:left-4 text-xs sm:text-sm bg-indigo-500 text-white px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg hover:bg-indigo-600 transition-all hover:scale-105 shadow-md flex items-center gap-1 sm:gap-2"
-        >
-          <span className="text-lg">←</span>
-          <span className="font-bold">Main Menu</span>
-        </button>
-
-        {/* Title */}
-        <div className="flex justify-center items-center mt-8 mb-6 sm:mb-8 gap-2 sm:gap-3 flex-wrap text-center">
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 tracking-tight">
-            Your Survey Adventure
-          </h2>
-          <span className="text-2xl sm:text-3xl">🏆</span>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-3 sm:p-4 md:p-6">
+      <div className="max-w-6xl mx-auto">
+        {/* Navigation Buttons */}
+        <div className="flex justify-between items-center mb-6 sm:mb-8">
+          <button
+            onClick={() => navigate("/dashboard")}
+            className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-2 sm:px-6 sm:py-2 rounded-full font-bold shadow-lg hover:shadow-xl transition-all text-sm sm:text-base"
+          >
+            Back to Dashboard
+          </button>
+          <button
+            onClick={() => navigate("/my-progress")}
+            className="bg-gradient-to-r from-blue-500 to-purple-500 text-white px-3 py-2 sm:px-6 sm:py-2 rounded-full font-bold shadow-lg hover:shadow-xl transition-all text-sm sm:text-base"
+          >
+            View Progress
+          </button>
         </div>
 
-        {responses.length === 0 ? (
-          <div className="text-center p-6 sm:p-8 bg-blue-50/50 rounded-xl border-2 border-dashed border-blue-200">
-            <p className="text-lg sm:text-xl text-gray-600 mb-3">
-              No quests completed yet!
-            </p>
-            <button
-              onClick={() => navigate("/dashboard")}
-              className="bg-gradient-to-r from-green-400 to-blue-500 text-white font-bold py-2 px-4 sm:py-3 sm:px-6 rounded-full shadow-lg hover:shadow-xl transition-all hover:scale-105 text-sm sm:text-base"
-            >
-              Start Your First Quest →
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {/* XP Progress Bar */}
-            <div className="relative">
-              <div className="bg-gray-200 rounded-full h-4 sm:h-6 mb-2 overflow-hidden">
-                <motion.div
-                  className="bg-gradient-to-r from-yellow-400 via-orange-500 to-pink-500 h-4 sm:h-6 rounded-full relative"
-                  initial={{ width: 0 }}
-                  animate={{
-                    width: `${Math.min(100, (responses.length / 10) * 100)}%`,
-                    backgroundPosition: ["0%", "100%", "0%"],
-                  }}
-                  transition={{
-                    duration: 1.5,
-                    ease: "easeInOut",
-                    backgroundPosition: {
-                      duration: 3,
-                      repeat: Infinity,
-                      ease: "linear",
-                    },
-                  }}
-                  style={{ backgroundSize: "200% 100%" }}
-                >
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <motion.div
-                      key={i}
-                      className="absolute top-0 h-4 sm:h-6 w-1 bg-white opacity-70"
-                      initial={{ left: `${Math.random() * 100}%`, opacity: 0 }}
-                      animate={{
-                        left: ["0%", "100%"],
-                        opacity: [0, 1, 0],
-                      }}
-                      transition={{
-                        duration: 1.5,
-                        delay: i * 0.3,
-                        repeat: Infinity,
-                        repeatDelay: 2,
-                      }}
-                      style={{
-                        transform: "rotate(45deg)",
-                        filter: "blur(1px)",
-                      }}
-                    />
-                  ))}
-                </motion.div>
-              </div>
+        {/* Header */}
+        <div className="text-center mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-800 mb-2 sm:mb-4">
+            🏆 Your Achievements
+          </h1>
+          <p className="text-gray-600 text-sm sm:text-base md:text-lg px-4">
+            Track your progress and unlock amazing rewards
+          </p>
+        </div>
 
-              <div className="flex justify-between items-center px-1 text-xs sm:text-sm">
-                <span className="font-bold text-gray-700">
-                  Level {currentLevel} Explorer
-                </span>
-                <span className="font-semibold text-gray-600">
-                  {responses.length} surveys completed
-                </span>
-              </div>
-
-              <div className="flex justify-between mt-1 px-1">
-                {[1, 2, 3, 4, 5].map((level) => (
-                  <div
-                    key={level}
-                    className={`w-3 h-3 sm:w-4 sm:h-4 rounded-full ${
-                      currentLevel >= level
-                        ? "bg-yellow-400 shadow-[0_0_6px_rgba(251,191,36,0.8)]"
-                        : "bg-gray-300"
-                    }`}
-                  />
-                ))}
-              </div>
+        {/* Stats Overview */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4 md:gap-6 mb-6 sm:mb-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white rounded-2xl p-3 sm:p-4 md:p-6 shadow-lg text-center"
+          >
+            <div className="text-2xl sm:text-3xl font-bold text-purple-600 mb-1 sm:mb-2">
+              {userStats.level}
             </div>
+            <div className="text-gray-600 text-xs sm:text-sm md:text-base">Current Level</div>
+          </motion.div>
 
-            {/* Reward Popup */}
-            <AnimatePresence>
-              {showReward && (
-                <motion.div
-                  initial={{ y: 20, opacity: 0, scale: 0.8 }}
-                  animate={{ y: 0, opacity: 1, scale: 1 }}
-                  exit={{ y: -20, opacity: 0, scale: 0.8 }}
-                  className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none px-4"
-                >
-                  <div className="bg-white/90 backdrop-blur-md p-4 sm:p-6 rounded-xl shadow-2xl border-2 border-yellow-400 w-full max-w-xs text-center">
-                    {rewardType === "confetti" && (
-                      <>
-                        <div className="text-4xl sm:text-5xl mb-2">🎉</div>
-                        <h3 className="text-lg sm:text-xl font-bold mb-1">
-                          Level Up!
-                        </h3>
-                        <p className="text-gray-700 text-sm">+100 XP Bonus</p>
-                      </>
-                    )}
-                    {rewardType === "badge" && (
-                      <>
-                        <div className="text-4xl sm:text-5xl mb-2">🏅</div>
-                        <h3 className="text-lg sm:text-xl font-bold mb-1">
-                          New Badge!
-                        </h3>
-                        <p className="text-gray-700 text-sm">
-                          "Survey Champion" unlocked
-                        </p>
-                      </>
-                    )}
-                    {rewardType === "streak" && (
-                      <>
-                        <div className="text-4xl sm:text-5xl mb-2">🔥</div>
-                        <h3 className="text-lg sm:text-xl font-bold mb-1">
-                          Streak Bonus!
-                        </h3>
-                        <p className="text-gray-700 text-sm">
-                          3 days in a row!
-                        </p>
-                      </>
-                    )}
-                    {rewardType === "special" && (
-                      <>
-                        <div className="text-4xl sm:text-5xl mb-2">💎</div>
-                        <h3 className="text-lg sm:text-xl font-bold mb-1">
-                          Rare Item!
-                        </h3>
-                        <p className="text-gray-700 text-sm">
-                          You found a golden survey!
-                        </p>
-                      </>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-white rounded-2xl p-3 sm:p-4 md:p-6 shadow-lg text-center"
+          >
+            <div className="text-2xl sm:text-3xl font-bold text-blue-600 mb-1 sm:mb-2">
+              {userStats.totalXP}
+            </div>
+            <div className="text-gray-600 text-xs sm:text-sm md:text-base">Total XP</div>
+          </motion.div>
 
-            {/* Survey List */}
-            {responses.map((resp, index) => (
-              <div
-                key={index}
-                className="relative p-4 sm:p-6 rounded-xl bg-gradient-to-br from-white to-purple-50 shadow-md hover:shadow-lg transition-all border-l-8 hover:-translate-y-1"
-                style={{
-                  borderColor: ["#a78bfa", "#f472b6", "#60a5fa", "#34d399"][
-                    index % 4
-                  ],
-                }}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-white rounded-2xl p-3 sm:p-4 md:p-6 shadow-lg text-center"
+          >
+            <div className="text-2xl sm:text-3xl font-bold text-green-600 mb-1 sm:mb-2">
+              {userStats.completedTasks}
+            </div>
+            <div className="text-gray-600 text-xs sm:text-sm md:text-base">Tasks Completed</div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-white rounded-2xl p-3 sm:p-4 md:p-6 shadow-lg text-center"
+          >
+            <div className="text-2xl sm:text-3xl font-bold text-orange-600 mb-1 sm:mb-2">
+              {userStats.currentStreak}
+            </div>
+            <div className="text-gray-600 text-xs sm:text-sm md:text-base">Day Streak</div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="bg-white rounded-2xl p-3 sm:p-4 md:p-6 shadow-lg text-center"
+          >
+            <div className="text-2xl sm:text-3xl font-bold text-pink-600 mb-1 sm:mb-2">
+              {achievements.filter(a => a.unlocked).length}
+            </div>
+            <div className="text-gray-600 text-xs sm:text-sm md:text-base">Badges Earned</div>
+          </motion.div>
+        </div>
+
+        {/* Level Progress */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+          className="bg-white rounded-2xl p-4 sm:p-6 shadow-lg mb-6 sm:mb-8"
+        >
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-2 sm:gap-0">
+            <h3 className="text-lg sm:text-xl font-bold text-gray-800">Level Progress</h3>
+            <span className="text-xs sm:text-sm text-gray-600">
+              {userStats.totalXP % 1000}/1000 XP to Level {userStats.level + 1}
+            </span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-4">
+            <div 
+              className="bg-gradient-to-r from-purple-500 to-pink-500 h-4 rounded-full transition-all duration-500"
+              style={{ width: `${getProgressToNextLevel()}%` }}
+            ></div>
+          </div>
+        </motion.div>
+
+        {/* Achievements Grid */}
+        <div className="mb-6 sm:mb-8">
+          <h3 className="text-xl sm:text-2xl font-bold text-gray-800 mb-4 sm:mb-6 text-center">
+            Achievement Badges
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
+            {achievements.map((achievement, index) => (
+              <motion.div
+                key={achievement.id}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: index * 0.1 }}
+                className={`bg-white rounded-2xl p-3 sm:p-4 md:p-6 shadow-lg text-center transition-all duration-300 ${
+                  achievement.unlocked 
+                    ? 'ring-2 ring-green-400 transform hover:scale-105' 
+                    : 'opacity-60'
+                }`}
               >
-                <div className="absolute -top-3 -left-3 bg-yellow-400 text-white font-bold rounded-full w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center shadow-md text-xs sm:text-sm">
-                  #{index + 1}
+                <div className={`text-2xl sm:text-3xl md:text-4xl mb-2 sm:mb-3 md:mb-4 ${achievement.unlocked ? '' : 'grayscale'}`}>
+                  {achievement.icon}
                 </div>
-
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0">
-                  <div>
-                    <p className="text-base sm:text-lg font-bold text-gray-800 mb-1">
-                      {resp.taskName}
-                    </p>
-                    <p className="text-xs sm:text-sm text-gray-500">
-                      🕒 {new Date(resp.completedAt).toLocaleString()}
-                    </p>
-                  </div>
-                  <span className="bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5 rounded-full mt-1 sm:mt-0">
-                    +50 XP
-                  </span>
+                <h4 className="font-bold text-gray-800 mb-1 sm:mb-2 text-sm sm:text-base">{achievement.name}</h4>
+                <p className="text-xs sm:text-sm text-gray-600 mb-2 sm:mb-3">{achievement.description}</p>
+                <div className={`inline-block px-2 py-1 sm:px-3 sm:py-1 rounded-full text-xs font-semibold ${
+                  achievement.unlocked 
+                    ? 'bg-green-100 text-green-800' 
+                    : 'bg-gray-100 text-gray-600'
+                }`}>
+                  {achievement.unlocked ? 'Unlocked!' : `Requires: ${achievement.requirement}`}
                 </div>
-
-                <div className="mt-3 text-xs text-gray-500 italic">
-                  {
-                    [
-                      "Great job, adventurer!",
-                      "Quest completed successfully!",
-                      "Another win in the bag!",
-                      "You're on a roll!",
-                      "XP boosted!",
-                    ][index % 5]
-                  }
-                </div>
-              </div>
+              </motion.div>
             ))}
           </div>
-        )}
+        </div>
+
+        
       </div>
     </div>
   );

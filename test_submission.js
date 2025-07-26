@@ -42,7 +42,7 @@ async function testTaskSubmission() {
     const taskId = '68792204389817bbc9bd7aed'; // Valid task ID from database
     
     const response = await axios.post(
-      `http://localhost:3001/api/tasks/${taskId}/submit`,
+      `http://localhost:3001/api/task/${taskId}/submit`,
       formData,
       {
         headers: {

@@ -65,7 +65,7 @@ export default function TaskPage() {
     if (!taskId) return;
     setLoading(true);
     setError("");
-    axios.get(`http://localhost:3001/api/tasks/${taskId}`, { withCredentials: true })
+    axios.get(`http://localhost:3001/api/task/${taskId}`, { withCredentials: true })
       .then(res => {
         setTask(res.data);
         setLoading(false);
@@ -144,26 +144,37 @@ export default function TaskPage() {
     
     try {
       setStatus('Submitting...');
-      const res = await axios.post(`http://localhost:3001/api/tasks/${taskId}/submit`, formData, {
+      const res = await axios.post(`http://localhost:3001/api/task/${taskId}/submit`, formData, {
         withCredentials: true,
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       
       // Enhanced response handling with real-time progress data
-      if (res.data.success !== false) {
-        setStatus('Submitted');
+      if (res.data.success) {
+        setStatus('Completed');
         setUserSubmission(res.data.submission);
         
-        // Silently refresh progress data without alert
-        console.log('✅ Task submitted successfully:', res.data);
+        // Update local state with real-time data
+        if (res.data.realTimeData) {
+          console.log('🔄 Dispatching task completion event:', res.data.realTimeData);
+          // This will trigger updates in other components
+          window.dispatchEvent(new CustomEvent('taskCompleted', {
+            detail: res.data.realTimeData
+          }));
+          
+          // Also dispatch a more generic event for broader compatibility
+          window.dispatchEvent(new CustomEvent('progressUpdate', {
+            detail: { type: 'taskCompleted', data: res.data.realTimeData }
+          }));
+        }
         
-        // Refresh user progress data
-        await fetchUserProgress();
+        // Show success message
+        alert(`🎉 Task completed successfully! You earned ${res.data.progress.pointsEarned} XP!`);
         
         // Navigate back to dashboard to see updated progress
         setTimeout(() => {
           navigate('/dashboard');
-        }, 500);
+        }, 1000);
       } else {
         throw new Error(res.data.message || 'Submission failed');
       }

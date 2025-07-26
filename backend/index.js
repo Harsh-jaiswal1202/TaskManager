@@ -10,23 +10,23 @@ import FeedbackRoutes from "./routes/FeedbackRoutes.js";
 import BatchProgressRoutes from "./routes/BatchProgressRoutes.js";
 import AnalyticsRoutes from "./routes/analyticsRoutes.js";
 import MentorAnalyticsRoutes from "./routes/mentorAnalyticsRoutes.js";
+import SurveyRoutes from "./routes/SurveyRoutes.js";
 
 const app = express();
 
 // Middleware
 app.use(cors({
   origin: [
-    "http://localhost:3001",
-    "http://localhost:5174",
+    "http://localhost:5173",
+    "http://localhost:3000",
     "http://127.0.0.1:5173",
-    "http://192.168.1.100:5173",
-    "http://localhost:5173"
+    "http://127.0.0.1:3000",
   ],
-  credentials: true
+  credentials: true,
 }));
+
+app.use(express.json());
 app.use(cookieParser());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Connect to MongoDB and start server
 connect("mongodb://localhost:27017/Tasks")
@@ -41,13 +41,14 @@ connect("mongodb://localhost:27017/Tasks")
 
 // Routes
 app.use("/api/categories", CategoryRoutes);
-app.use("/api/tasks", TaskRoutes);
+app.use("/api/task", TaskRoutes);
 app.use("/api/user", UserRoutes);
 app.use("/api/batches", BatchRoutes);
 app.use("/api/feedback", FeedbackRoutes);
 app.use("/api/batch-progress", BatchProgressRoutes);
 app.use("/api/analytics", AnalyticsRoutes);
 app.use("/api/mentor", MentorAnalyticsRoutes);
+app.use("/api/survey", SurveyRoutes);
 // Optional test route
 app.get("/", (req, res) => {
   res.send("API is working!");

@@ -13,10 +13,33 @@ export const getUserBatchProgress = async (req, res) => {
       .populate('taskProgress.taskId', 'name description points difficulty dueDate')
       .populate('taskProgress.submissionId', 'submissionType value submittedAt status grade feedback')
       .populate('batchId', 'name description industryFocus')
-      .populate('userId', 'username displayName email');
+              .populate('userId', 'username email');
     
     if (!progress) {
-      return res.status(404).json({ message: "Progress record not found" });
+      // Return default progress structure instead of 404
+      const defaultProgress = {
+        userId,
+        batchId,
+        progressMetrics: {
+          totalTasks: 0,
+          completedTasks: 0,
+          totalPointsEarned: 0,
+          averageGrade: 0,
+          completionPercentage: 0
+        },
+        activityLog: [],
+        learningSummary: "",
+        skillsAcquired: [],
+        engagedTopics: [],
+        moodTracker: [],
+        lastActiveAt: new Date(),
+        enrolledAt: new Date()
+      };
+      
+      return res.status(200).json({
+        success: true,
+        progress: defaultProgress
+      });
     }
     
     res.status(200).json({
@@ -61,14 +84,14 @@ export const getBatchProgress = async (req, res) => {
     const { batchId } = req.params;
     
     const batchProgress = await UserBatchProgress.find({ batchId })
-      .populate('userId', 'username displayName email')
+              .populate('userId', 'username email')
       .populate('taskProgress.taskId', 'name points difficulty')
       .sort({ 'progressMetrics.completionPercentage': -1 });
     
     // Get batch info
     const batch = await Batch.findById(batchId)
-      .populate('mentors', 'username displayName')
-      .populate('admin', 'username displayName');
+              .populate('mentors', 'username')
+        .populate('admin', 'username');
     
     res.status(200).json({
       success: true,
@@ -91,7 +114,7 @@ export const getRecentBatchActivity = async (req, res) => {
     const { limit = 50 } = req.query;
     
     const recentActivity = await UserBatchProgress.find({ batchId })
-      .populate('userId', 'username displayName')
+              .populate('userId', 'username')
       .populate('activityLog.taskId', 'name')
       .select('userId activityLog')
       .sort({ 'activityLog.timestamp': -1 })
@@ -190,10 +213,11 @@ export const initializeBatchProgress = async (req, res) => {
 // GET /api/batch-progress/dashboard/:userId - Get dashboard data for user
 export const getUserDashboard = async (req, res) => {
   try {
-    const { userId } = req.params;
+    // Use authenticated user from JWT token
+    const userId = req.user.id;
     
     // Get user's current XP from their profile
-    const user = await User.findById(userId).select('xps username displayName');
+    const user = await User.findById(userId).select('xps username');
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
@@ -364,7 +388,7 @@ export const getUserDashboard = async (req, res) => {
         recentSubmissions,
         userProfile: {
           username: user.username,
-          displayName: user.displayName,
+          username: user.username,
           totalXP: user.xps
         },
         lastUpdated: new Date()
@@ -561,7 +585,8 @@ export const handleTaskSubmission = async (req, res) => {
     // Calculate current streak
          const streak = calculateUserStreak(userProgress.activityLog);
     
-    res.status(200).json({
+    // Prepare comprehensive response with real-time data
+    const responseData = {
       success: true,
       message: "Task submitted successfully",
       data: {
@@ -571,13 +596,79 @@ export const handleTaskSubmission = async (req, res) => {
         pointsEarned: task.points || 0,
         newTotalXP: user.xps,
         isFirstTaskOfDay
+      },
+      realTimeData: {
+        taskStatus: 'completed',
+        taskId: taskId,
+        batchId: batchId,
+        userId: userId,
+        pointsEarned: task.points || 0,
+        newTotalXP: user.xps,
+        currentStreak: streak,
+        completionTime: new Date(),
+        batchProgress: {
+          completedTasks: userProgress.progressMetrics.completedTasks,
+          totalTasks: userProgress.progressMetrics.totalTasks,
+          completionPercentage: userProgress.progressMetrics.completionPercentage,
+          totalPointsEarned: userProgress.progressMetrics.totalPointsEarned
+        }
       }
-    });
+    };
+    
+
+    
+    res.status(200).json(responseData);
     
   } catch (error) {
     console.error("Error handling task submission:", error);
     res.status(500).json({ 
       message: "Failed to process task submission", 
+      error: error.message 
+    });
+  }
+};
+
+// GET /api/batch-progress/test/:userId - Test route for debugging progress data
+export const getTestProgressData = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    // Get user's progress data for testing
+    const userProgress = await UserBatchProgress.find({ userId })
+      .populate('batchId', 'name description industryFocus status')
+      .populate('taskProgress.taskId', 'name description points difficulty dueDate')
+      .populate('taskProgress.submissionId', 'submissionType value submittedAt status grade feedback')
+      .populate('userId', 'username email')
+      .sort({ lastActiveAt: -1 });
+    
+    // Get user info
+    const user = await User.findById(userId).select('username email xps role');
+    
+    // Create test response data
+    const testData = {
+      user: user,
+      progressRecords: userProgress,
+      summary: {
+        totalBatches: userProgress.length,
+        totalTasks: userProgress.reduce((sum, progress) => sum + progress.taskProgress.length, 0),
+        completedTasks: userProgress.reduce((sum, progress) => 
+          sum + progress.taskProgress.filter(tp => tp.status === 'completed').length, 0
+        ),
+        totalXP: user?.xps || 0
+      },
+      testTimestamp: new Date().toISOString()
+    };
+    
+    res.status(200).json({
+      success: true,
+      message: "Test progress data retrieved successfully",
+      data: testData
+    });
+    
+  } catch (error) {
+    console.error("Error fetching test progress data:", error);
+    res.status(500).json({ 
+      message: "Failed to fetch test progress data", 
       error: error.message 
     });
   }

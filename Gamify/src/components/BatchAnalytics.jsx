@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { 
   FaChartLine, 
@@ -16,7 +16,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Area, RadialBarChart, RadialBar, Legend, Cell, LabelList, PieChart, Pie, AreaChart
 } from 'recharts';
 import Cookies from 'js-cookie';
-import axios from 'axios';
+import { apiService } from '../services/api.js';
+import config from '../config/environment.js';
 
 export default function BatchAnalytics({ batchData, studentProgress, mode }) {
   if (!batchData || !batchData._id) {
@@ -136,6 +137,69 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
     ).length;
   };
 
+  // Function to fetch batch progress data
+  const fetchBatchProgressData = useCallback(async () => {
+    const userId = Cookies.get('id');
+    const batchId = batchData?._id;
+    
+    if (!userId || !batchId) return;
+
+    try {
+      const response = await apiService.getUserProgress(userId, batchId);
+      
+      if (response.data.success && response.data.progress) {
+        const progressData = response.data.progress;
+        setBatchProgressData(progressData);
+        
+        // Calculate real metrics from backend data
+        const metrics = progressData.progressMetrics;
+        const activityLog = progressData.activityLog || [];
+        
+        setTasksAssigned(metrics.totalTasks || 0);
+        setTasksCompleted(metrics.completedTasks || 0);
+        setTotalXP(metrics.totalPointsEarned || 0);
+        setAverageScore(metrics.averageGrade || 0);
+        
+        // Calculate streak from real activity data
+        const streak = calculateStreakFromActivities(activityLog);
+        setCurrentStreak(streak);
+        
+        // Calculate weekly completions
+        const weeklyComps = calculateWeeklyCompletions(activityLog);
+        setWeeklyCompletions(weeklyComps);
+        
+        // Set overview fields from backend
+        setLearningSummary(progressData.learningSummary || "");
+        setSkillsAcquired(progressData.skillsAcquired || []);
+        setEngagedTopics(progressData.engagedTopics || []);
+        setMoodTracker(progressData.moodTracker || []);
+      }
+    } catch (error) {
+      console.error('❌ Error refreshing batch progress data:', error);
+    }
+  }, [batchData?._id]);
+
+  // Function to fetch mentor analytics data
+  const fetchMentorAnalytics = useCallback(async () => {
+    if (mode !== 'mentor' || !batchData?._id) return;
+
+    try {
+      const [progressRes, engagementRes, taskRes] = await Promise.all([
+        apiService.getStudentProgress(batchData._id),
+        apiService.getEngagement(batchData._id),
+        apiService.getTaskManagement(batchData._id)
+      ]);
+
+      setMentorAnalytics({
+        studentProgress: progressRes.data,
+        engagement: engagementRes.data,
+        taskManagement: taskRes.data
+      });
+    } catch (error) {
+      console.error('❌ Error refreshing mentor analytics:', error);
+    }
+  }, [mode, batchData?._id]);
+
   // Fetch real batch progress data
   useEffect(() => {
     const userId = Cookies.get('id');
@@ -150,10 +214,8 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
     setLoading(true);
     setError(null);
 
-    // Use the correct UserBatchProgress API endpoint
-    axios.get(`http://localhost:3001/api/batch-progress/user/${userId}/${batchId}`, { 
-      withCredentials: true 
-    })
+    // Use the centralized API service
+    apiService.getUserProgress(userId, batchId)
       .then(response => {
         console.log('📊 Real batch progress data received:', response.data);
         
@@ -224,10 +286,10 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
     if (!userId) return;
     setFeedbackLoading(true);
     Promise.all([
-      axios.get(`http://localhost:3001/api/feedback/satisfaction/${userId}`),
-      axios.get(`http://localhost:3001/api/feedback/mentor/${userId}`),
-      axios.get(`http://localhost:3001/api/feedback/task/${userId}`),
-      axios.get(`http://localhost:3001/api/feedback/timeline/${userId}`),
+      apiService.getSatisfaction(userId),
+      apiService.getMentorFeedback(userId),
+      apiService.getTaskFeedback(userId),
+      apiService.getFeedbackTimeline(userId),
     ]).then(([satisfactionRes, mentorRes, taskRes, timelineRes]) => {
       setStudentSatisfaction(Number(satisfactionRes.data.averageRating || 0));
       setMentorFeedback(mentorRes.data || []);
@@ -246,9 +308,9 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
       
       // Fetch all mentor analytics data from the correct endpoints
       Promise.all([
-        axios.get(`http://localhost:3001/api/mentor/batch/${batchData._id}/student-progress`, { withCredentials: true }),
-        axios.get(`http://localhost:3001/api/mentor/batch/${batchData._id}/engagement`, { withCredentials: true }),
-        axios.get(`http://localhost:3001/api/mentor/batch/${batchData._id}/task-management`, { withCredentials: true })
+        apiService.getStudentProgress(batchData._id),
+        apiService.getEngagement(batchData._id),
+        apiService.getTaskManagement(batchData._id)
       ])
       .then(([progressRes, engagementRes, taskRes]) => {
         setMentorAnalytics({
@@ -265,6 +327,70 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
       });
     }
   }, [mode, batchData?._id]);
+
+  // Real-time task completion listener
+  useEffect(() => {
+    const handleTaskCompleted = (event) => {
+      console.log('🔄 BatchAnalytics received task completion event:', event.detail);
+      const realTimeData = event.detail;
+      
+      // Refresh data immediately when a task is completed
+      if (realTimeData.taskStatus === 'completed') {
+        console.log('🔄 Refreshing analytics data due to task completion...');
+        // Force immediate refresh with a small delay to ensure backend has processed
+        setTimeout(() => {
+          // Refresh data instead of reloading page
+          if (batchData?._id) {
+            fetchBatchProgressData();
+            if (mode === 'mentor') {
+              fetchMentorAnalytics();
+            }
+          }
+        }, 100);
+      }
+    };
+
+    const handleProgressUpdate = (event) => {
+      console.log('🔄 BatchAnalytics received progress update event:', event.detail);
+      if (event.detail.type === 'taskCompleted') {
+        console.log('🔄 Refreshing analytics data due to progress update...');
+        setTimeout(() => {
+          if (batchData?._id) {
+            fetchBatchProgressData();
+            if (mode === 'mentor') {
+              fetchMentorAnalytics();
+            }
+          }
+        }, 100);
+      }
+    };
+
+    window.addEventListener('taskCompleted', handleTaskCompleted);
+    window.addEventListener('progressUpdate', handleProgressUpdate);
+    
+    // Cleanup listener on unmount
+    return () => {
+      window.removeEventListener('taskCompleted', handleTaskCompleted);
+      window.removeEventListener('progressUpdate', handleProgressUpdate);
+    };
+  }, [batchData?._id, mode, fetchBatchProgressData, fetchMentorAnalytics]);
+
+  // Periodic refresh for admin/mentor pages
+  useEffect(() => {
+    if (mode === 'admin' || mode === 'mentor') {
+      const interval = setInterval(() => {
+        console.log('🔄 Periodic refresh for admin/mentor analytics...');
+        if (batchData?._id) {
+          fetchBatchProgressData();
+          if (mode === 'mentor') {
+            fetchMentorAnalytics();
+          }
+        }
+      }, config.REAL_TIME.PERIODIC_REFRESH.ADMIN_PAGES);
+      
+      return () => clearInterval(interval);
+    }
+  }, [mode, batchData?._id, fetchBatchProgressData, fetchMentorAnalytics]);
 
   // Animated counter helper
   function AnimatedNumber({ value, duration = 1.2, className = "" }) {
@@ -341,7 +467,24 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
           <div className="text-center">
             <div className="text-red-500 text-lg mb-4">{error}</div>
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => {
+                setLoading(true);
+                setError(null);
+                // Re-fetch data instead of reloading the page
+                const userId = Cookies.get('id');
+                const batchId = batchData?._id;
+                if (userId && batchId) {
+                  apiService.getUserProgress(userId, batchId)
+                    .then(response => {
+                      if (response.data.success && response.data.progress) {
+                        const progressData = response.data.progress;
+                        setBatchProgressData(progressData);
+                        setLoading(false);
+                      }
+                    })
+                    .catch(() => setLoading(false));
+                }
+              }}
               className="px-6 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-all"
             >
               Try Again
@@ -517,28 +660,28 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
     // PATCH helpers
     const saveSummary = async () => {
       setLoadingEdit(true);
-      await axios.patch(`http://localhost:3001/api/user/${userId}/progress/batch/${batchId}/summary`, { learningSummary: summaryDraft });
+      await apiService.updateProgressSummary(userId, batchId, { learningSummary: summaryDraft });
       setLearningSummary(summaryDraft);
       setEditSummary(false);
       setLoadingEdit(false);
     };
     const saveSkills = async () => {
       setLoadingEdit(true);
-      await axios.patch(`http://localhost:3001/api/user/${userId}/progress/batch/${batchId}/skills`, { skillsAcquired: skillsDraft });
+      await apiService.updateProgressSkills(userId, batchId, { skillsAcquired: skillsDraft });
       setSkillsAcquired(skillsDraft);
       setEditSkills(false);
       setLoadingEdit(false);
     };
     const saveTopics = async () => {
       setLoadingEdit(true);
-      await axios.patch(`http://localhost:3001/api/user/${userId}/progress/batch/${batchId}/topics`, { engagedTopics: topicsDraft });
+      await apiService.updateProgressTopics(userId, batchId, { engagedTopics: topicsDraft });
       setEngagedTopics(topicsDraft);
       setEditTopics(false);
       setLoadingEdit(false);
     };
     const saveMood = async () => {
       setLoadingEdit(true);
-      await axios.patch(`http://localhost:3001/api/user/${userId}/progress/batch/${batchId}/mood`, { moodTracker: moodDraft });
+      await apiService.updateProgressMood(userId, batchId, { moodTracker: moodDraft });
       setMoodTracker(moodDraft);
       setEditMood(false);
       setLoadingEdit(false);
@@ -704,13 +847,10 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
 
     const submitMentorFeedback = async () => {
       setSubmittingFeedback(true);
-      const token = Cookies.get('authToken');
-      await axios.post(`http://localhost:3001/api/feedback/mentor/${userId}`, {
+      await apiService.submitMentorFeedback(userId, {
         batch: batchId,
         rating: feedbackRating,
         content: feedbackText,
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
       });
       setShowMentorFeedbackModal(false);
       setFeedbackToast('Mentor feedback submitted!');
@@ -721,14 +861,11 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
     };
     const submitTaskFeedback = async (taskId) => {
       setSubmittingFeedback(true);
-      const token = Cookies.get('authToken');
-      await axios.post(`http://localhost:3001/api/feedback/task/${userId}`, {
+      await apiService.submitTaskFeedback(userId, {
         batch: batchId,
         task: taskId,
         rating: feedbackRating,
         content: feedbackText,
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
       });
       setShowTaskFeedbackModal({ open: false, task: null });
       setFeedbackToast('Task feedback submitted!');
@@ -886,15 +1023,9 @@ export default function BatchAnalytics({ batchData, studentProgress, mode }) {
       
       // Fetch all analytics data
       Promise.all([
-        axios.get(`http://localhost:3001/api/analytics/batch/${batchId}/enrollment`, {
-          headers: { Authorization: `Bearer ${token}` }
-        }),
-        axios.get(`http://localhost:3001/api/analytics/batch/${batchId}/engagement`, {
-          headers: { Authorization: `Bearer ${token}` }
-        }),
-        axios.get(`http://localhost:3001/api/analytics/batch/${batchId}/performance`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
+        apiService.getAnalyticsEnrollment(batchId),
+        apiService.getAnalyticsEngagement(batchId),
+        apiService.getAnalyticsPerformance(batchId)
       ])
       .then(([enrollmentRes, engagementRes, performanceRes]) => {
         setAdminAnalytics({
@@ -1353,15 +1484,9 @@ function MentorAnalytics({ batchData }) {
     
     // Fetch all mentor analytics data
     Promise.all([
-      axios.get(`http://localhost:3001/api/mentor/batch/${batchId}/student-progress`, {
-        headers: { Authorization: `Bearer ${token}` }
-      }),
-      axios.get(`http://localhost:3001/api/mentor/batch/${batchId}/engagement`, {
-        headers: { Authorization: `Bearer ${token}` }
-      }),
-      axios.get(`http://localhost:3001/api/mentor/batch/${batchId}/task-management`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
+      apiService.getStudentProgress(batchId),
+      apiService.getEngagement(batchId),
+      apiService.getTaskManagement(batchId)
     ])
     .then(([progressRes, engagementRes, taskRes]) => {
       setMentorAnalytics({
@@ -1380,14 +1505,10 @@ function MentorAnalytics({ batchData }) {
 
   const handleGradeSubmission = async (submissionId, grade, feedback) => {
     try {
-      const token = Cookies.get('authToken');
-      await axios.post(`http://localhost:3001/api/mentor/grade-submission`, {
+      await apiService.gradeSubmission({
         submissionId,
         grade,
         feedback
-      }, {
-        headers: { Authorization: `Bearer ${token}` },
-        withCredentials: true
       });
       
       // Update local state

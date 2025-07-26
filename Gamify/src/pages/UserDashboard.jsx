@@ -1,10 +1,11 @@
 import { usePoints } from "../contexts/PointsContext";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import { FaSignOutAlt, FaChevronDown, FaUserCircle, FaPlus, FaTrash, FaCamera } from "react-icons/fa";
 import Cookies from "js-cookie";
-import axios from "axios";
+import { apiService } from "../services/api.js";
+import { eventManager } from "../utils/eventManager.js";
 import PortalDropdown from "../components/PortalDropdown";
 import FeedbackModal from '../components/FeedbackModal';
 
@@ -36,7 +37,7 @@ export default function Dashboard() {
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const profileBtnRef = useRef();
   const [profileMenuPos, setProfileMenuPos] = useState({ top: 0 });
-  const [profileEdit, setProfileEdit] = useState({ avatar: '', username: '', displayName: '', email: '' });
+  const [profileEdit, setProfileEdit] = useState({ avatar: '', username: '', email: '' });
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState('');
   const [activePage, setActivePage] = useState('dashboard'); // 'dashboard' or 'profile'
@@ -50,6 +51,45 @@ export default function Dashboard() {
   const [showMentorFeedbackModal, setShowMentorFeedbackModal] = useState(false);
   const [taskFeedbackModal, setTaskFeedbackModal] = useState({ open: false, task: null });
   const [completedTasks, setCompletedTasks] = useState([]);
+
+  // Fetch user batches
+  const fetchMyBatches = useCallback(() => {
+    setBatchLoading(true);
+    apiService.getUserBatches()
+      .then(res => {
+        setMyBatches(res.data);
+        setBatchLoading(false);
+      })
+      .catch((error) => {
+        console.error('Error fetching my batches:', error);
+        setBatchLoading(false);
+      });
+  }, [userId]);
+
+  // Fetch available batches
+  const fetchAvailableBatches = useCallback(() => {
+    apiService.getAvailableBatches()
+      .then(res => {
+        setAvailableBatches(res.data);
+      })
+      .catch((error) => {
+        console.error('Error fetching available batches:', error);
+      });
+  }, [userId]);
+
+  // Fetch user XP from backend
+  const fetchUserXP = useCallback(async () => {
+    try {
+      const response = await apiService.getDashboard();
+      
+      if (response.data.success) {
+        const userXP = response.data.dashboard.userProfile.totalXP || 0;
+        setXps(userXP);
+      }
+    } catch (error) {
+      console.error('Error fetching user XP:', error);
+    }
+  }, [userId]);
 
   useEffect(() => {
     if (showBatchDropdown && batchesBtnRef.current) {
@@ -69,8 +109,8 @@ export default function Dashboard() {
       return;
     }
 
-    // FORCE XPS TO 0 - IGNORE API DATA
-    setXps(0);
+    // Fetch user XP from backend
+    fetchUserXP();
 
     const today = new Date().toDateString();
     const lastGlobalReset = localStorage.getItem("lastGlobalReset");
@@ -92,32 +132,71 @@ export default function Dashboard() {
       );
     }
 
-    // ✅ Fetch categories from backend
-    // axios
-    //   .get("http://localhost:3001/api/categories/all")
-    //   .then((res) => {
-    //     console.log("Categories fetched successfully:", res.data);
-        
-    //     setCategories(res.data);
-    //   })
-    //   .catch((err) => {
-    //     console.error("Error fetching tasks:", err);
-    //   });
-    // Fetch user batches
+    // Add real-time task completion listener
+    const handleTaskCompleted = (event) => {
+      const realTimeData = event.detail;
+      
+      // Refresh user XP and completed tasks
+      fetchUserXP();
+      fetchMyBatches();
+      
+      // Update completed tasks list
+      if (realTimeData.activityLog && realTimeData.activityLog.length > 0) {
+        const latestActivity = realTimeData.activityLog[realTimeData.activityLog.length - 1];
+        if (latestActivity.action === 'task_completed') {
+          setCompletedTasks(prev => [{
+            taskName: latestActivity.metadata?.taskName || 'Task',
+            completedAt: latestActivity.timestamp,
+            points: latestActivity.metadata?.points || 50
+          }, ...prev.slice(0, 9)]); // Keep only last 10
+        }
+      }
+      
+      // Refresh batch data to show updated progress
+      fetchMyBatches();
+    };
+
+    window.addEventListener('taskCompleted', handleTaskCompleted);
+
+    // Add event manager listeners for real-time updates
+    const handleEventManagerTaskCompleted = (data) => {
+      fetchUserXP();
+      fetchMyBatches();
+      fetchAvailableBatches();
+    };
+
+    const handleEventManagerBatchEnrolled = (data) => {
+      fetchMyBatches();
+      fetchAvailableBatches();
+    };
+
+    // Subscribe to events using event manager
+    const unsubscribeTaskCompleted = eventManager.subscribe('taskCompleted', handleEventManagerTaskCompleted);
+    const unsubscribeBatchEnrolled = eventManager.subscribe('batchEnrolled', handleEventManagerBatchEnrolled);
+
+    // Fetch initial data
     fetchMyBatches();
     fetchAvailableBatches();
+    
     // Fetch user info to get parentId
-    axios.get(`http://localhost:3001/api/user/${userId}`)
+    apiService.getUser(userId)
       .then(res => {
         if (res.data && res.data.parentId) {
           // Fetch admin info by parentId
-          axios.get(`http://localhost:3001/api/user/${res.data.parentId}`)
+          apiService.getUser(res.data.parentId)
             .then(adminRes => setAdminInfo(adminRes.data))
             .catch(() => setAdminInfo(null));
         }
       })
       .catch(() => setAdminInfo(null));
-  }, []);
+
+    // Cleanup function
+    return () => {
+      window.removeEventListener('taskCompleted', handleTaskCompleted);
+      unsubscribeTaskCompleted();
+      unsubscribeBatchEnrolled();
+    };
+  }, [userId, navigate, fetchUserXP, fetchMyBatches, fetchAvailableBatches]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -136,12 +215,11 @@ export default function Dashboard() {
   useEffect(() => {
     if (activePage === 'profile' || activePage === 'dashboard') {
       setProfileLoading(true);
-      axios.get(`http://localhost:3001/api/user/${userId}`)
+      apiService.getUser(userId)
         .then(res => {
           setProfileEdit({
             avatar: res.data.avatar || '',
             username: res.data.username || '',
-            displayName: res.data.displayName || '',
             email: res.data.email || '',
           });
           setUserAvatar(res.data.avatar || '');
@@ -170,37 +248,23 @@ export default function Dashboard() {
     setCompletedTasks(allTasks);
   }, []);
 
-  const fetchMyBatches = () => {
-    setBatchLoading(true);
-    axios.get(`http://localhost:3001/api/batches/user?userId=${userId}`)
-      .then(res => {
-        setMyBatches(res.data);
-        setBatchLoading(false);
-      })
-      .catch(() => setBatchLoading(false));
-  };
 
-  const fetchAvailableBatches = () => {
-    axios.get(`http://localhost:3001/api/batches/available?userId=${userId}`)
-      .then(res => setAvailableBatches(res.data))
-      .catch(() => {});
-  };
 
-  const handleEnroll = (batchId) => {
+  const handleEnroll = useCallback((batchId) => {
     const userId = Cookies.get('id');
     setEnrolling((prev) => ({ ...prev, [batchId]: true }));
-    axios.post(`http://localhost:3001/api/batches/${batchId}/enroll`, { userId })
+    apiService.enrollInBatch(batchId, { userId })
       .then(() => {
         fetchMyBatches();
         fetchAvailableBatches();
         setEnrolling((prev) => ({ ...prev, [batchId]: false }));
       })
       .catch(() => setEnrolling((prev) => ({ ...prev, [batchId]: false })));
-  };
+  }, [fetchMyBatches, fetchAvailableBatches]);
 
   const fetchMentorRating = async (mentorId) => {
     try {
-      const res = await axios.get(`http://localhost:3001/api/feedback/to/${mentorId}`);
+      const res = await apiService.getFeedbackTo(mentorId);
       if (!res.data.length) return 'N/A';
       const avg = res.data.reduce((sum, f) => sum + (f.rating || 0), 0) / res.data.length;
       return avg.toFixed(1);
@@ -209,11 +273,11 @@ export default function Dashboard() {
     }
   };
 
-  const handleFeedbackSubmit = async () => {
+  const handleFeedbackSubmit = useCallback(async () => {
     if (!feedbackText.trim()) return;
     setSubmittingFeedback(true);
     try {
-      await axios.post('http://localhost:3001/api/feedback/submit', {
+      await apiService.submitFeedback({
         fromUser: userId,
         toUser: feedbackModal.batch.mentor._id,
         batch: feedbackModal.batch._id,
@@ -226,7 +290,7 @@ export default function Dashboard() {
       fetchMyBatches();
     } catch {}
     setSubmittingFeedback(false);
-  };
+  }, [feedbackText, feedbackRating, feedbackModal.batch, userId, fetchMyBatches]);
 
   // Handle avatar upload
   const handleAvatarChange = (e) => {
@@ -250,9 +314,8 @@ export default function Dashboard() {
   const handleProfileSave = async () => {
     setProfileLoading(true);
     try {
-      await axios.patch(`http://localhost:3001/api/user/${userId}`, {
+      await apiService.updateUser(userId, {
         username: profileEdit.username,
-        displayName: profileEdit.displayName,
         email: profileEdit.email,
         avatar: profileEdit.avatar,
       });
@@ -414,10 +477,7 @@ export default function Dashboard() {
                     <span className="block text-xs text-gray-500 font-semibold">Username</span>
                     <span className="block text-lg text-gray-800 font-bold">{profileEdit.username}</span>
                   </div>
-                  <div>
-                    <span className="block text-xs text-gray-500 font-semibold">Display Name</span>
-                    <span className="block text-lg text-gray-800 font-bold">{profileEdit.displayName || '-'}</span>
-                  </div>
+
                   <div>
                     <span className="block text-xs text-gray-500 font-semibold">Email</span>
                     <span className="block text-lg text-gray-800 font-bold">{profileEdit.email}</span>
@@ -525,17 +585,7 @@ export default function Dashboard() {
                     required
                   />
                 </div>
-                {/* Display Name */}
-                <div className="w-full">
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Display Name</label>
-                  <input
-                    type="text"
-                    name="displayName"
-                    value={profileEdit.displayName}
-                    onChange={handleProfileEditChange}
-                    className="w-full px-3 py-2 rounded-lg border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
-                  />
-                </div>
+
                 {/* Email */}
                 <div className="w-full">
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
@@ -997,8 +1047,19 @@ function AsyncMentorRating({ mentorId }) {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const r = await fetchMentorRating(mentorId);
-      if (mounted) setRating(r);
+      try {
+        const res = await apiService.getFeedbackTo(mentorId);
+        if (mounted) {
+          if (!res.data.length) {
+            setRating('N/A');
+          } else {
+            const avg = res.data.reduce((sum, f) => sum + (f.rating || 0), 0) / res.data.length;
+            setRating(avg.toFixed(1));
+          }
+        }
+      } catch {
+        if (mounted) setRating('N/A');
+      }
     })();
     return () => { mounted = false; };
   }, [mentorId]);

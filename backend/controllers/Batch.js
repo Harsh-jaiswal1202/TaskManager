@@ -124,16 +124,18 @@ export const getBatches = async (req, res) => {
 // Get all batches for a user
 export const getBatchesForUser = async (req, res) => {
   try {
-    const { userId } = req.query;
-    if (!userId) return res.status(400).json({ message: 'userId is required' });
-
+    // Use authenticated user from JWT token
+    const userId = req.user.id;
+    
+    if (!userId) return res.status(400).json({ message: 'User not authenticated' });
+    
     // Find the user to get their parentId (admin)
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    // Only return batches created by the user's admin
+    // Return batches where the user is actually enrolled
     let batches = await Batch.find({
-      admin: user.parentId
+      users: userId
     }).populate('admin mentor users');
 
     batches = batches.map(batch => {
@@ -143,6 +145,7 @@ export const getBatchesForUser = async (req, res) => {
       filteredBatch.users = (filteredBatch.users || []).filter(u => u.designation === 'user');
       return filteredBatch;
     });
+    
     res.status(200).json(batches);
   } catch (error) {
     res.status(500).json({ message: 'Failed to fetch user batches', error: error.message });
@@ -152,8 +155,9 @@ export const getBatchesForUser = async (req, res) => {
 // Get all batches a user can enroll in (not already enrolled)
 export const getAvailableBatchesForUser = async (req, res) => {
   try {
-    const { userId } = req.query;
-    if (!userId) return res.status(400).json({ message: 'userId is required' });
+    // Use authenticated user from JWT token
+    const userId = req.user.id;
+    if (!userId) return res.status(400).json({ message: 'User not authenticated' });
 
     // Find the user to get their parentId (admin)
     const user = await User.findById(userId);
@@ -172,8 +176,10 @@ export const getAvailableBatchesForUser = async (req, res) => {
       filteredBatch.users = (filteredBatch.users || []).filter(u => u.designation === 'user');
       return filteredBatch;
     });
+    
     res.status(200).json(batches);
   } catch (error) {
+    console.error('❌ getAvailableBatchesForUser error:', error);
     res.status(500).json({ message: 'Failed to fetch available batches', error: error.message });
   }
 };
@@ -226,7 +232,7 @@ export const enrollUser = async (req, res) => {
     const existingProgress = await UserBatchProgress.findOne({ userId, batchId });
     
     if (!existingProgress) {
-      console.log('🔍 Creating UserBatchProgress for user:', userId, 'batch:', batchId);
+  
       
       // Create task progress entries for all tasks in the batch
       const taskProgress = batch.tasks.map(task => ({
@@ -268,16 +274,15 @@ export const enrollUser = async (req, res) => {
       );
 
       await userProgress.save();
-      console.log('✅ UserBatchProgress created successfully');
     } else {
-      console.log('⚠️ UserBatchProgress already exists for this user and batch');
+      // UserBatchProgress already exists for this user and batch
     }
 
     // Return updated batch
     const updatedBatch = await Batch.findById(batchId)
-      .populate('users', 'username displayName email')
-      .populate('mentors', 'username displayName')
-      .populate('admin', 'username displayName');
+              .populate('users', 'username email')
+        .populate('mentors', 'username')
+        .populate('admin', 'username');
     
     res.status(200).json({ 
       message: 'User enrolled successfully', 
@@ -321,9 +326,7 @@ export const editBatch = async (req, res) => {
     const { name, admin, mentor, description, industryFocus, difficultyLevel, estimatedDuration, learningObjectives, tasks } = req.body;
     const batch = await Batch.findById(id);
     if (!batch) return res.status(404).json({ message: 'Batch not found' });
-    // Debug logging
-    console.log('User making request:', req.user);
-    console.log('Batch admin:', batch.admin.toString());
+    // Only superadmin or the assigned admin can edit batch
     // Only superadmin or the assigned admin can edit batch
     if (
       !req.user ||

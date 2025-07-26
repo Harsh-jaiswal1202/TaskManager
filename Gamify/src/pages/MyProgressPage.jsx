@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { usePoints } from "../contexts/PointsContext";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import Cookies from "js-cookie";
-import axios from "axios";
+import { apiService } from "../services/api.js";
+import { eventManager } from "../utils/eventManager.js";
+import config from "../config/environment.js";
 
 export default function MyProgressPage() {
   const { points } = usePoints();
@@ -19,10 +21,30 @@ export default function MyProgressPage() {
     totalTasksAssigned: 0,
     currentStreak: 0
   });
+  const [tasks, setTasks] = useState([]);
 
   // NOTE: Streak calculation moved to backend for consistency and real-time updates
   // The backend now handles streak calculation in the dashboard API and task submission API
   // This ensures consistent streak tracking across all user interactions
+
+  // Fetch tasks for all user batches
+  const fetchTasks = async () => {
+    if (!userId) return;
+    
+    try {
+      const response = await apiService.getAllTasks();
+      
+      // The backend returns tasks directly, not wrapped in success object
+      if (response.data && Array.isArray(response.data)) {
+        setTasks(response.data);
+      } else {
+        setTasks([]);
+      }
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+      setTasks([]);
+    }
+  };
 
   // Fetch comprehensive user progress data
   useEffect(() => {
@@ -31,20 +53,37 @@ export default function MyProgressPage() {
     setLoading(true);
     setError(null);
     
-    axios.get(`http://localhost:3001/api/batch-progress/dashboard/${userId}`, { 
-      withCredentials: true 
-          })
-      .then(response => {
-        if (response.data.success) {
-          const dashboard = response.data.dashboard;
+    // Fetch both dashboard data and tasks
+    Promise.all([
+      apiService.getDashboard(),
+      fetchTasks()
+    ])
+      .then(([dashboardResponse]) => {
+        if (dashboardResponse.data.success) {
+          const dashboard = dashboardResponse.data.dashboard;
+          console.log('🔍 DEBUG: Dashboard data received:', dashboard);
           setDashboardData(dashboard);
           
-          // FORCE ALL VALUES TO 0 - IGNORE API DATA FOR NOW
+          // Use real data from backend
+          const totalXP = dashboard.overallStats?.totalPointsEarned || 0;
+          const totalTasksCompleted = dashboard.overallStats?.totalCompletedTasks || 0;
+          const totalTasksAssigned = dashboard.overallStats?.totalTasksAcrossAllBatches || 0;
+          const currentStreak = dashboard.overallStats?.currentStreak || 0;
+          
+          // Debug logging for overall stats
+          console.log('🔍 DEBUG: Overall stats:', {
+            totalXP,
+            totalTasksCompleted,
+            totalTasksAssigned,
+            currentStreak,
+            overallStats: dashboard.overallStats
+          });
+          
           setUserStats({
-            totalXP: 0,
-            totalTasksCompleted: 0,
-            totalTasksAssigned: 0,
-            currentStreak: 0
+            totalXP,
+            totalTasksCompleted,
+            totalTasksAssigned,
+            currentStreak
           });
         }
         
@@ -57,30 +96,37 @@ export default function MyProgressPage() {
       });
   }, [userId]);
 
+  // Force refresh when component mounts
+  useEffect(() => {
+    if (userId) {
+      refreshData();
+    }
+  }, [userId]);
+
   // Function to refresh data
-  const refreshData = () => {
-    if (!userId) return;
+  const refreshData = useCallback(() => {
+    if (!userId || loading) return; // Prevent multiple simultaneous calls
     
     setLoading(true);
     setError(null);
     
-    axios.get(`http://localhost:3001/api/batch-progress/dashboard/${userId}`, { 
-      withCredentials: true 
-    })
+    apiService.getDashboard()
       .then(response => {
         if (response.data.success) {
           const dashboard = response.data.dashboard;
           setDashboardData(dashboard);
           
-          // Use backend-calculated streak instead of frontend calculation
-          // const streak = calculateStreakFromActivities(dashboard.batchProgress, dashboard.recentSubmissions);
+          // Use real data from backend
+          const totalXP = dashboard.overallStats?.totalPointsEarned || 0;
+          const totalTasksCompleted = dashboard.overallStats?.totalCompletedTasks || 0;
+          const totalTasksAssigned = dashboard.overallStats?.totalTasksAcrossAllBatches || 0;
+          const currentStreak = dashboard.overallStats?.currentStreak || 0;
           
-          // FORCE ALL VALUES TO 0 - IGNORE API DATA FOR NOW  
           setUserStats({
-            totalXP: 0,
-            totalTasksCompleted: 0,
-            totalTasksAssigned: 0,
-            currentStreak: 0
+            totalXP,
+            totalTasksCompleted,
+            totalTasksAssigned,
+            currentStreak
           });
         }
         
@@ -91,9 +137,9 @@ export default function MyProgressPage() {
         setError('Failed to refresh progress data. Please try again.');
         setLoading(false);
       });
-  };
+  }, [userId, loading]);
 
-  // Refresh data when user returns from task submission
+  // Refresh data when user returns from task submission or when page becomes visible
   useEffect(() => {
     const handleFocus = () => {
       if (userId && !loading) {
@@ -114,17 +160,61 @@ export default function MyProgressPage() {
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [userId, loading]);
+  }, [userId, loading, refreshData]);
+
+  // Periodic refresh to check for new tasks
+  useEffect(() => {
+    if (!userId) return;
+    
+    const interval = setInterval(() => {
+      if (!loading) {
+        refreshData();
+      }
+    }, config.REAL_TIME.PERIODIC_REFRESH.USER_PAGES);
+    
+    return () => clearInterval(interval);
+  }, [userId, loading, refreshData]);
+
+  // Real-time task completion listener using event manager
+  useEffect(() => {
+    const handleTaskCompleted = (data) => {
+      // Refresh data immediately when a task is completed
+      if (data.taskStatus === 'completed') {
+        // Force immediate refresh with a small delay to ensure backend has processed
+        setTimeout(() => {
+          refreshData();
+        }, config.REAL_TIME.TASK_COMPLETION_DELAY);
+      }
+    };
+
+    const handleProgressUpdate = (data) => {
+      if (data.type === 'taskCompleted') {
+        setTimeout(() => {
+          refreshData();
+        }, config.REAL_TIME.TASK_COMPLETION_DELAY);
+      }
+    };
+
+    // Subscribe to events using event manager
+    const unsubscribeTaskCompleted = eventManager.subscribe('taskCompleted', handleTaskCompleted);
+    const unsubscribeProgressUpdate = eventManager.subscribe('progressUpdate', handleProgressUpdate);
+    
+    // Cleanup listeners on unmount
+    return () => {
+      unsubscribeTaskCompleted();
+      unsubscribeProgressUpdate();
+    };
+  }, [userId, refreshData]);
 
   // Function to handle task submission and update progress
-  const handleTaskSubmissionUpdate = async (taskId, batchId, submissionData = {}) => {
+  const handleTaskSubmissionUpdate = useCallback(async (taskId, batchId, submissionData = {}) => {
     try {
-      const response = await axios.post(`http://localhost:3001/api/batch-progress/submit-task`, {
+      const response = await apiService.submitTaskProgress({
         userId,
         taskId,
         batchId,
         submissionData
-      }, { withCredentials: true });
+      });
       
       if (response.data.success) {
         // Immediately update user stats with new data
@@ -152,7 +242,7 @@ export default function MyProgressPage() {
         error: error.message
       };
     }
-  };
+  }, [userId, refreshData]);
 
   // Make the function available globally for task submission components
   React.useEffect(() => {
@@ -240,9 +330,9 @@ export default function MyProgressPage() {
               <>🔄 Refresh</>
             )}
           </button>
-
+          
           <h1 className="text-3xl font-bold text-white drop-shadow-md mt-4">
-            My Progress: Data Analytics
+            My Progress
           </h1>
           <p className="text-white/80 text-sm mt-2">Real-time learning progress tracking</p>
         </div>
@@ -269,19 +359,19 @@ export default function MyProgressPage() {
                   <h2 className="text-xl font-bold text-purple-700">Learning Progress</h2>
                 </div>
                 
-                {/* Main Stats Grid - 4 cards in a row */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                {/* Main Stats Grid - 3 cards in a row */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                   <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4 text-center border border-blue-200">
                     <div className="text-2xl mb-1">📚</div>
                     <p className="text-sm text-gray-600">Tasks Assigned vs Completed</p>
                     <div className="mt-2">
                       <div className="text-xs text-blue-600 mb-1">
-                        Assigned: {userStats.totalTasksAssigned}
+                        Assigned: {dashboardData?.overallStats?.totalTasksAcrossAllBatches || 0}
                       </div>
-                      <div className="text-xl font-bold text-blue-600">{userStats.totalTasksCompleted}</div>
+                      <div className="text-xl font-bold text-blue-600">{dashboardData?.overallStats?.totalCompletedTasks || 0}</div>
                       <div className="text-xs text-gray-500">
-                        {userStats.totalTasksAssigned > 0 
-                          ? `${Math.round((userStats.totalTasksCompleted / userStats.totalTasksAssigned) * 100)}% Complete`
+                        {dashboardData?.overallStats?.totalTasksAcrossAllBatches > 0 
+                          ? `${Math.round((dashboardData?.overallStats?.totalCompletedTasks / dashboardData?.overallStats?.totalTasksAcrossAllBatches) * 100)}% Complete`
                           : '0% Complete'
                         }
                       </div>
@@ -290,57 +380,11 @@ export default function MyProgressPage() {
                         <div 
                           className="bg-blue-600 h-1.5 rounded-full transition-all duration-500"
                           style={{ 
-                            width: `${userStats.totalTasksAssigned > 0 
-                              ? Math.round((userStats.totalTasksCompleted / userStats.totalTasksAssigned) * 100)
+                            width: `${dashboardData?.overallStats?.totalTasksAcrossAllBatches > 0 
+                              ? Math.round((dashboardData?.overallStats?.totalCompletedTasks / dashboardData?.overallStats?.totalTasksAcrossAllBatches) * 100)
                               : 0}%` 
                           }}
                         ></div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 text-center border border-green-200">
-                    <div className="text-2xl mb-1">✅</div>
-                    <p className="text-sm text-gray-600">Tasks Completed This Week</p>
-                    <div className="mt-2">
-                      <div className="text-xl font-bold text-green-600">
-                        {(() => {
-                          const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-                          
-                          // Count from recent submissions
-                          const recentSubmissions = dashboardData.recentSubmissions.filter(submission => {
-                            const submissionDate = new Date(submission.submittedAt);
-                            return submissionDate > weekAgo;
-                          }).length;
-                          
-                          // Also count from activity logs
-                          let activityCount = 0;
-                          dashboardData.batchProgress.forEach(batchProgress => {
-                            if (batchProgress.activityLog) {
-                              activityCount += batchProgress.activityLog.filter(activity => {
-                                if (activity.action === 'task_completed') {
-                                  const activityDate = new Date(activity.timestamp);
-                                  return activityDate > weekAgo;
-                                }
-                                return false;
-                              }).length;
-                            }
-                          });
-                          
-                          // Use the higher count (in case of discrepancies)
-                          const totalThisWeek = Math.max(recentSubmissions, activityCount);
-                          return totalThisWeek;
-                        })()}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {(() => {
-                          const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-                          const thisWeekCount = dashboardData.recentSubmissions.filter(submission => {
-                            const submissionDate = new Date(submission.submittedAt);
-                            return submissionDate > weekAgo;
-                          }).length;
-                          return thisWeekCount > 0 ? "Great progress!" : "Complete a task to see your progress!";
-                        })()}
                       </div>
                     </div>
                   </div>
@@ -349,9 +393,9 @@ export default function MyProgressPage() {
                     <div className="text-2xl mb-1">🔥</div>
                     <p className="text-sm text-gray-600">Current Streak</p>
                     <div className="mt-2">
-                      <div className="text-xl font-bold text-amber-600">{userStats.currentStreak}</div>
+                      <div className="text-xl font-bold text-amber-600">{dashboardData?.overallStats?.currentStreak || 0}</div>
                       <div className="text-xs text-gray-500">
-                        {userStats.currentStreak > 0 ? "Days" : "Start your streak!"}
+                        {(dashboardData?.overallStats?.currentStreak || 0) > 0 ? "Days" : "Start your streak!"}
                       </div>
                     </div>
                   </div>
@@ -360,12 +404,12 @@ export default function MyProgressPage() {
                     <div className="text-2xl mb-1">⭐</div>
                     <p className="text-sm text-gray-600">Batch XP Earned</p>
                     <div className="mt-2">
-                      <div className="text-xl font-bold text-purple-600">{userStats.totalXP}</div>
+                      <div className="text-xl font-bold text-purple-600">{dashboardData?.overallStats?.totalPointsEarned || 0}</div>
                       <div className="text-xs text-gray-500">
                         From completed tasks
                       </div>
                       <div className="text-xs text-purple-400 mt-1">
-                        Total Account XP: 0
+                        Total Account XP: {dashboardData?.userProfile?.totalXP || 0}
                       </div>
                     </div>
                   </div>
@@ -376,69 +420,83 @@ export default function MyProgressPage() {
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-sm font-medium text-gray-700">Total XP</span>
                     <span className="text-sm text-purple-600 font-semibold">
-                      {userStats.totalXP} XP
+                      {dashboardData?.userProfile?.totalXP || 0} XP
                     </span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-3">
                     <div 
                       className="bg-gradient-to-r from-purple-500 to-pink-500 h-3 rounded-full transition-all duration-500"
-                      style={{ width: `${Math.min((userStats.totalXP % 1000) / 1000 * 100, 100)}%` }}
+                      style={{ width: `${Math.min(((dashboardData?.userProfile?.totalXP || 0) % 1000) / 1000 * 100, 100)}%` }}
                     ></div>
                   </div>
                   <div className="text-xs text-gray-500 mt-1">
-                    Level Progress: {userStats.totalXP % 1000}/1000 XP to next level
+                    Level Progress: {(dashboardData?.userProfile?.totalXP || 0) % 1000}/1000 XP to next level
                   </div>
                 </div>
                 
                 {/* Batch-specific Progress */}
                 <div className="space-y-6">
                   <h3 className="text-lg font-semibold text-gray-800">Batch Progress</h3>
-                  {dashboardData.batchProgress.map(progress => (
-                    <div key={progress.batchId._id} className="bg-gradient-to-br from-white to-gray-50 rounded-xl p-6 border border-gray-200 shadow-md">
-                      <h4 className="text-xl font-bold text-purple-700 mb-4">{progress.batchId.name}</h4>
-                      
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                        <div className="text-center">
-                          <div className="text-lg font-semibold text-blue-600">0</div>
-                          <div className="text-sm text-gray-600">Total Tasks</div>
+                  {dashboardData.batchProgress.map(progress => {
+                    // Use real backend data from progressMetrics
+                    const totalTasks = progress.progressMetrics.totalTasks;
+                    const completedTasks = progress.progressMetrics.completedTasks;
+                    const progressPercentage = progress.progressMetrics.completionPercentage;
+                    const earnedPoints = progress.progressMetrics.totalPointsEarned;
+                    
+                    // Debug logging for each batch
+                    console.log('🔍 DEBUG: Batch progress data:', {
+                      batchName: progress.batchId.name,
+                      totalTasks,
+                      completedTasks,
+                      progressPercentage,
+                      earnedPoints,
+                      taskProgress: progress.taskProgress
+                    });
+
+                    return (
+                      <div key={progress.batchId._id} className="bg-gradient-to-br from-white to-gray-50 rounded-xl p-6 border border-gray-200 shadow-md">
+                        <h4 className="text-xl font-bold text-purple-700 mb-4">{progress.batchId.name}</h4>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                          <div className="text-center">
+                            <div className="text-lg font-semibold text-blue-600">{totalTasks}</div>
+                            <div className="text-sm text-gray-600">Total Tasks</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-lg font-semibold text-green-600">{completedTasks}</div>
+                            <div className="text-sm text-gray-600">Completed</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-lg font-semibold text-purple-600">{progressPercentage}%</div>
+                            <div className="text-sm text-gray-600">Progress</div>
+                          </div>
                         </div>
-                        <div className="text-center">
-                          <div className="text-lg font-semibold text-green-600">0</div>
-                          <div className="text-sm text-gray-600">Completed</div>
+                        
+                        {/* Progress Bar */}
+                        <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+                          <div 
+                            className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-500"
+                            style={{ width: `${progressPercentage}%` }}
+                          ></div>
                         </div>
-                        <div className="text-center">
-                          <div className="text-lg font-semibold text-orange-600">0</div>
-                          <div className="text-sm text-gray-600">Submitted</div>
+                        
+                        <div className="text-sm text-purple-600 mb-2">
+                          Points Earned: {progress.progressMetrics?.totalPointsEarned || 0} XP
+                          <span className="text-xs text-gray-500 ml-2">
+                            ({completedTasks} tasks completed)
+                          </span>
                         </div>
-                        <div className="text-center">
-                          <div className="text-lg font-semibold text-purple-600">0%</div>
-                          <div className="text-sm text-gray-600">Progress</div>
-                        </div>
+                        
+                        <button
+                          onClick={() => navigate(`/batch/${progress.batchId._id}/analytics`)}
+                          className="w-full py-2 rounded-lg text-sm font-semibold transition-all hover:scale-105 bg-gradient-to-r from-purple-500 to-pink-500 text-white"
+                        >
+                          View Detailed Analytics
+                        </button>
                       </div>
-                      
-                      {/* Progress Bar */}
-                      <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
-                        <div 
-                          className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-500"
-                          style={{ width: `${progress.progressMetrics.completionPercentage}%` }}
-                        ></div>
-                      </div>
-                      
-                      <div className="text-sm text-purple-600 mb-2">
-                        Points Earned: 0 XP
-                        <span className="text-xs text-gray-500 ml-2">
-                          (0 tasks submitted)
-                        </span>
-                      </div>
-                      
-                      <button
-                        onClick={() => navigate(`/batch/${progress.batchId._id}/analytics`)}
-                        className="w-full py-2 rounded-lg text-sm font-semibold transition-all hover:scale-105 bg-gradient-to-r from-purple-500 to-pink-500 text-white"
-                      >
-                        View Detailed Analytics
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </>

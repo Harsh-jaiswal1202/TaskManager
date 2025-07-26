@@ -1,29 +1,72 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import { apiService } from '../services/api.js';
+import Cookies from 'js-cookie';
 
 const PointsContext = createContext();
 
 export function PointsProvider({ children }) {
-  const [points, setPoints] = useState(() => {
-    // Initial load from localStorage or default to 0
-    const storedPoints = localStorage.getItem("userPoints");
-    return storedPoints ? parseInt(storedPoints, 10) : 0;
-  });
+  const [points, setPoints] = useState(0);
+  const [loading, setLoading] = useState(true);
 
-  const addPoints = (amount) => {
-    setPoints((prev) => {
-      const newPoints = prev + amount;
-      localStorage.setItem("userPoints", newPoints);
-      return newPoints;
-    });
+  // Fetch user points from backend
+  const fetchUserPoints = useCallback(async () => {
+    try {
+      const userId = Cookies.get('id');
+      if (!userId) {
+        setLoading(false);
+        return;
+      }
+
+      const response = await apiService.getUser(userId);
+      
+      setPoints(response.data.xps || 0);
+    } catch (error) {
+      console.error('Failed to fetch user points:', error);
+      setPoints(0);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Update points in backend
+  const updatePointsInBackend = async (newPoints) => {
+    try {
+      const userId = Cookies.get('id');
+      if (!userId) return;
+
+      await apiService.updatePoints(userId, { xps: newPoints });
+    } catch (error) {
+      console.error('Failed to update points in backend:', error);
+    }
   };
 
-  // Optional: Keep in sync if points are updated manually somewhere
   useEffect(() => {
-    localStorage.setItem("userPoints", points);
-  }, [points]);
+    fetchUserPoints();
+  }, [fetchUserPoints]);
+
+  const addPoints = async (amount) => {
+    const newPoints = points + amount;
+    setPoints(newPoints);
+    
+    // Update in backend
+    await updatePointsInBackend(newPoints);
+  };
+
+  const setPointsDirectly = async (newPoints) => {
+    setPoints(newPoints);
+    
+    // Update in backend
+    await updatePointsInBackend(newPoints);
+  };
 
   return (
-    <PointsContext.Provider value={{ points, addPoints }}>
+    <PointsContext.Provider value={{ 
+      points, 
+      addPoints, 
+      setPoints: setPointsDirectly,
+      loading,
+      refreshPoints: fetchUserPoints 
+    }}>
       {children}
     </PointsContext.Provider>
   );

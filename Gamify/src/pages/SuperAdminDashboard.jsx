@@ -3,9 +3,8 @@ import { useEffect, useState, useRef } from "react";
 import { FaSignOutAlt, FaEdit, FaTrash, FaUserCircle, FaPlus, FaCamera } from "react-icons/fa";
 import Cookies from "js-cookie";
 import axios from "axios";
-import { restrictAdmin, restrictUser, restrictMentor } from '../services/api';
+import { apiService } from '../services/api.js';
 import EnhancedBatchModal from '../components/EnhancedBatchModal';
-import api from '../services/api';
 import PortalDropdown from "../components/PortalDropdown";
 
 export default function SuperAdminDashboard() {
@@ -31,7 +30,7 @@ export default function SuperAdminDashboard() {
   // Profile modal state and handlers (copied from UserDashboard.jsx)
   const [showProfileMenuModal, setShowProfileMenuModal] = useState(false);
   const [activePage, setActivePage] = useState('dashboard');
-  const [profileEdit, setProfileEdit] = useState({ avatar: '', username: '', displayName: '', email: '' });
+  const [profileEdit, setProfileEdit] = useState({ avatar: '', username: '', email: '' });
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState('');
   const [profileEditMode, setProfileEditMode] = useState(false);
@@ -50,7 +49,6 @@ export default function SuperAdminDashboard() {
           setProfileEdit({
             avatar: res.data.avatar || '',
             username: res.data.username || '',
-            displayName: res.data.displayName || '',
             email: res.data.email || '',
           });
           setUserAvatar(res.data.avatar || '');
@@ -107,18 +105,25 @@ export default function SuperAdminDashboard() {
     // eslint-disable-next-line
   }, []);
 
+  // Refetch data when view changes
+  useEffect(() => {
+    if (view === 'batches') {
+      fetchBatches();
+    } else if (view === 'admins' || view === 'mentors' || view === 'users') {
+      fetchUsers();
+    }
+  }, [view]);
+
   const fetchUsers = async () => {
     setLoading(true);
     setError("");
     try {
-      const token = Cookies.get('authToken');
-      const res = await axios.get("http://localhost:3001/api/user/all", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setAdmins(res.data.admins);
+      const res = await apiService.getAllUsers();
+      setAdmins(res.data.admins || []);
       setMentors(res.data.mentors || []);
-      setUsers(res.data.users);
+      setUsers(res.data.users || []);
     } catch (err) {
+      console.error('Failed to fetch users:', err);
       setError("Failed to fetch users.");
     }
     setLoading(false);
@@ -126,10 +131,11 @@ export default function SuperAdminDashboard() {
 
   const fetchBatches = async () => {
     try {
-      const res = await api.get("/batches/");
-      setBatches(res.data);
+      const res = await apiService.getAllBatches();
+      setBatches(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
-      // Optionally handle error
+      console.error('Failed to fetch batches:', err);
+      setBatches([]);
     }
   };
 
@@ -138,7 +144,7 @@ export default function SuperAdminDashboard() {
     setError("");
     try {
       const token = Cookies.get('authToken');
-      await restrictAdmin(adminId, token);
+      await apiService.restrictAdmin(adminId, token);
       fetchUsers();
     } catch (err) {
       setError("Failed to update admin status.");
@@ -151,7 +157,7 @@ export default function SuperAdminDashboard() {
     setError("");
     try {
       const token = Cookies.get('authToken');
-      await restrictMentor(mentorId, token);
+      await apiService.restrictMentor(mentorId, token);
       fetchUsers();
     } catch (err) {
       setError("Failed to update mentor status.");
@@ -164,7 +170,7 @@ export default function SuperAdminDashboard() {
     setError("");
     try {
       const token = Cookies.get('authToken');
-      await restrictUser(userId, token);
+      await apiService.restrictUser(userId, token);
       fetchUsers();
     } catch (err) {
       setError("Failed to update user status.");
@@ -182,14 +188,14 @@ export default function SuperAdminDashboard() {
   const handleEditModalSave = async () => {
     if (!editModal.admin || !editModal.mentor) return;
     try {
-      const token = Cookies.get('authToken');
-      await axios.put(`http://localhost:3001/api/batches/${editModal.batch._id}`, {
+      await apiService.updateBatch(editModal.batch._id, {
         admin: editModal.admin,
         mentor: editModal.mentor,
-      }, { headers: { Authorization: `Bearer ${token}` } });
+      });
       setEditModal({ isOpen: false, batch: null, admin: '', mentor: '' });
       fetchBatches();
     } catch (err) {
+      console.error('Failed to update batch:', err);
       alert('Failed to update batch.');
     }
   };
@@ -197,7 +203,8 @@ export default function SuperAdminDashboard() {
   const handleDeleteBatch = async (batchId) => {
     setDeleteLoading((prev) => ({ ...prev, [batchId]: true }));
     try {
-      await axios.delete(`http://localhost:3001/api/batches/${batchId}`);
+      const token = Cookies.get('authToken');
+      await apiService.deleteBatch(batchId, token);
       fetchBatches();
     } catch (err) {
       alert('Failed to delete batch.');
@@ -207,10 +214,12 @@ export default function SuperAdminDashboard() {
 
   const fetchAllMentorsAndAdmins = async () => {
     try {
-      const res = await axios.get("http://localhost:3001/api/user/all", { withCredentials: true });
+      const res = await apiService.getAllUsers();
       setAllMentors(res.data.mentors || []);
       setAllAdmins(res.data.admins || []);
-    } catch {}
+    } catch (err) {
+      console.error('Failed to fetch mentors and admins:', err);
+    }
   };
 
   const handleEnhancedBatchSubmit = async (data) => {
@@ -219,9 +228,9 @@ export default function SuperAdminDashboard() {
     try {
       const token = Cookies.get('authToken');
       if (isEditMode) {
-        await axios.put(`http://localhost:3001/api/batches/${editBatch._id}`, data, { headers: { Authorization: `Bearer ${token}` } });
+        await apiService.updateBatch(editBatch._id, data);
       } else {
-        await axios.post("http://localhost:3001/api/batches/", data, { headers: { Authorization: `Bearer ${token}` } });
+        await apiService.createBatch(data);
       }
       setShowEnhancedBatchModal(false);
       setEditBatch(null);
@@ -632,8 +641,10 @@ export default function SuperAdminDashboard() {
               <div className="max-w-3xl mx-auto">
                 <h2 className="text-xl font-bold mb-4 text-purple-700">Admins</h2>
                 <div className="space-y-4">
-                  {admins.length === 0 && <div className="text-gray-500">No admins found.</div>}
-                  {admins.map((admin) => (
+                  {!Array.isArray(admins) || admins.length === 0 ? (
+                    <div className="text-gray-500">No admins found.</div>
+                  ) : (
+                    admins.map((admin) => (
                     <div key={admin._id} className="flex items-center justify-between bg-gradient-to-r from-purple-100 to-pink-100 rounded-xl px-4 py-3 shadow border border-purple-200">
                       <div>
                         <div className="font-semibold text-purple-800">{admin.username}</div>
@@ -651,7 +662,8 @@ export default function SuperAdminDashboard() {
                           : 'Restrict'}
                       </button>
                     </div>
-                  ))}
+                  ))
+                )}
                 </div>
               </div>
             )}
@@ -659,8 +671,10 @@ export default function SuperAdminDashboard() {
               <div className="max-w-3xl mx-auto">
                 <h2 className="text-xl font-bold mb-4 text-blue-700">Mentors</h2>
                 <div className="space-y-4">
-                  {mentors.length === 0 && <div className="text-gray-500">No mentors found.</div>}
-                  {mentors.map((mentor) => (
+                  {!Array.isArray(mentors) || mentors.length === 0 ? (
+                    <div className="text-gray-500">No mentors found.</div>
+                  ) : (
+                    mentors.map((mentor) => (
                     <div key={mentor._id} className="flex items-center justify-between bg-gradient-to-r from-blue-100 to-purple-100 rounded-xl px-4 py-3 shadow border border-blue-200">
                       <div>
                         <div className="font-semibold text-blue-800">{mentor.username}</div>
@@ -678,7 +692,8 @@ export default function SuperAdminDashboard() {
                           : 'Restrict'}
                       </button>
                     </div>
-                  ))}
+                  ))
+                )}
                 </div>
               </div>
             )}
@@ -686,8 +701,10 @@ export default function SuperAdminDashboard() {
               <div className="max-w-3xl mx-auto">
                 <h2 className="text-xl font-bold mb-4 text-pink-700">Users</h2>
                 <div className="space-y-4">
-                  {users.length === 0 && <div className="text-gray-500">No users found.</div>}
-                  {users.map((user) => (
+                  {!Array.isArray(users) || users.length === 0 ? (
+                    <div className="text-gray-500">No users found.</div>
+                  ) : (
+                    users.map((user) => (
                     <div key={user._id} className="flex items-center justify-between bg-gradient-to-r from-pink-100 to-purple-100 rounded-xl px-4 py-3 shadow border border-pink-200">
                       <div>
                         <div className="font-semibold text-pink-800">{user.username}</div>
@@ -705,7 +722,8 @@ export default function SuperAdminDashboard() {
                           : 'Restrict'}
                       </button>
                     </div>
-                  ))}
+                  ))
+                )}
                 </div>
               </div>
             )}
@@ -713,7 +731,7 @@ export default function SuperAdminDashboard() {
               <div className="w-full">
                 <h2 className="text-xl font-bold mb-4 text-purple-700">Batches</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
-                  {batches.length === 0 ? (
+                  {!Array.isArray(batches) || batches.length === 0 ? (
                     <div className="col-span-full text-center text-gray-500">No batches found.</div>
                   ) : (
                     batches.map((batch) => (
@@ -776,7 +794,7 @@ export default function SuperAdminDashboard() {
                           onChange={e => setEditModal(m => ({ ...m, admin: e.target.value }))}
                         >
                           <option value="">Select admin</option>
-                          {admins.map(a => (
+                          {Array.isArray(admins) && admins.map(a => (
                             <option key={a._id} value={a._id}>{a.username} ({a.email})</option>
                           ))}
                         </select>
@@ -789,7 +807,7 @@ export default function SuperAdminDashboard() {
                           onChange={e => setEditModal(m => ({ ...m, mentor: e.target.value }))}
                         >
                           <option value="">Select mentor</option>
-                          {mentors.map(m => (
+                          {Array.isArray(mentors) && mentors.map(m => (
                             <option key={m._id} value={m._id}>{m.username} ({m.email})</option>
                           ))}
                         </select>

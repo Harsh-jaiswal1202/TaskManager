@@ -7,16 +7,19 @@ import {
   initializeBatchProgress,
   getUserDashboard,
   getUserNotifications,
-  handleTaskSubmission
+  handleTaskSubmission,
+  getTestProgressData
 } from "../controllers/BatchProgress.js";
+import { authenticateJWT } from "../controllers/User.js";
 
 const router = express.Router();
 
 // User-specific progress routes
-router.get("/user/:userId/:batchId", getUserBatchProgress); // Get specific batch progress for user
-router.get("/user/:userId", getAllUserProgress); // Get all batch progress for user
-router.get("/dashboard/:userId", getUserDashboard); // Get dashboard data for user
-router.get("/notifications/:userId", getUserNotifications); // Get notifications for user
+router.get("/user/:userId/:batchId", authenticateJWT, getUserBatchProgress); // Get specific batch progress for user
+router.get("/user/:userId", authenticateJWT, getAllUserProgress); // Get all batch progress for user
+router.get("/dashboard/me", authenticateJWT, getUserDashboard); // Get dashboard data for authenticated user
+router.get("/notifications/:userId", authenticateJWT, getUserNotifications); // Get notifications for user
+router.get("/test/:userId", getTestProgressData); // Test route for debugging
 
 // Batch-specific progress routes (for admin/mentor)
 router.get("/batch/:batchId", getBatchProgress); // Get all students' progress in a batch

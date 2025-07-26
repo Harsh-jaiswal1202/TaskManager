@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { FaPlus, FaTrash, FaIndustry, FaGraduationCap, FaTasks, FaUsers } from 'react-icons/fa';
-import { taskAPI } from '../services/api';
+import { apiService } from '../services/api.js';
 
 export default function EnhancedBatchModal({ 
   isOpen, 
@@ -177,7 +177,7 @@ export default function EnhancedBatchModal({
         videoUrl: lessonForm.videoUrl,
         contentType: lessonForm.contentType,
       };
-      const res = await taskAPI.create(data);
+      const res = await apiService.createTask(data);
       if (res.data && res.data._id) {
         setDisplayedTasks(prev => {
           const updated = [...prev, res.data];

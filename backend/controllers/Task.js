@@ -5,6 +5,61 @@ import Submission from "../models/Submission.js";
 import UserBatchProgress from "../models/UserBatchProgress.js";
 import Batch from "../models/Batch.js";
 
+// Real-time notification system
+const notifyRealTimeUpdate = (eventType, data) => {
+  // This will be used to notify all connected clients about updates
+  // For now, we'll use a simple event system that can be extended with WebSockets later
+  
+  
+  // Dispatch a custom event that can be listened to by the frontend
+  if (typeof global !== 'undefined' && global.io) {
+    global.io.emit('realTimeUpdate', { type: eventType, data });
+  }
+};
+
+// Utility function to initialize user progress for a batch
+const initializeUserProgress = async (userId, batchId) => {
+  try {
+    // Check if progress already exists
+    let userProgress = await UserBatchProgress.findOne({ 
+      userId: userId, 
+      batchId: batchId 
+    });
+    
+    if (!userProgress) {
+      // Get all tasks in this batch
+      const batchTasks = await Task.find({ batch: batchId });
+      
+      // Create initial task progress for all tasks
+      const taskProgress = batchTasks.map(task => ({
+        taskId: task._id,
+        status: 'not_started',
+        pointsEarned: 0,
+        attempts: 0
+      }));
+      
+      // Create new progress document
+      userProgress = await UserBatchProgress.create({
+        userId: userId,
+        batchId: batchId,
+        taskProgress: taskProgress,
+        progressMetrics: {
+          totalTasks: batchTasks.length,
+          completedTasks: 0,
+          completionPercentage: 0
+        }
+      });
+      
+  
+    }
+    
+    return userProgress;
+  } catch (error) {
+    console.error(`🔍 DEBUG: Error initializing user progress for user ${userId} in batch ${batchId}:`, error);
+    throw error;
+  }
+};
+
 const startTask = async (req, res) => {
   try {
     const { id } = req.params;
@@ -76,7 +131,7 @@ const getAllTasks = async (req, res) => {
 
 const getAllTasksForBatch = async (req, res) => {
   try {
-    const tasks = await Task.find().populate('category');
+    const tasks = await Task.find().populate('category').populate('batch');
     res.status(200).json(tasks);
   } catch (error) {
     console.error("Error fetching all tasks:", error);
@@ -107,7 +162,7 @@ async function createTask(req, res) {
       return res.status(400).json({ message: 'Missing required fields.' });
     }
 
-    // Step 1: Create the new task
+    // Step 1: Create the new task with the specified batch
     const task = await Task.create({
       name,
       description,
@@ -115,7 +170,7 @@ async function createTask(req, res) {
       category,
       difficulty,
       assignedTo,
-      batch,
+      batch, // This ensures the task is assigned to the correct batch
       type,
       points,
       badge,
@@ -126,12 +181,105 @@ async function createTask(req, res) {
 
     // Step 2: Push the task reference into the Category model
     await Category.findByIdAndUpdate(
-      category, // category is the category ID
+      category,
       { $push: { tasks: task._id } },
       { new: true, useFindAndModify: false }
     );
 
-    res.status(201).json(task);
+    // Step 3: Add task to the specified batch
+    if (batch) {
+      await Batch.findByIdAndUpdate(
+        batch,
+        { $push: { tasks: task._id } }
+      );
+      
+      // Update progress for all users in this specific batch
+      const batchWithUsers = await Batch.findById(batch).populate('users');
+      if (batchWithUsers) {
+  
+        
+        for (const user of batchWithUsers.users) {
+          let userProgress = await UserBatchProgress.findOne({ 
+            userId: user._id, 
+            batchId: batch 
+          });
+          
+          if (userProgress) {
+
+            
+            // Check if task already exists in progress
+            const taskExists = userProgress.taskProgress.some(tp => tp.taskId.toString() === task._id.toString());
+            
+            if (!taskExists) {
+              // Add new task to existing progress
+              userProgress.taskProgress.push({
+                taskId: task._id,
+                status: 'not_started',
+                pointsEarned: 0,
+                attempts: 0
+              });
+              
+              // Update progress metrics
+              userProgress.progressMetrics.totalTasks = userProgress.taskProgress.length;
+              
+              // Manually update completion percentage
+              const completedTasks = userProgress.taskProgress.filter(tp => tp.status === 'completed').length;
+              userProgress.progressMetrics.completedTasks = completedTasks;
+              userProgress.progressMetrics.completionPercentage = userProgress.progressMetrics.totalTasks > 0 
+                ? Math.round((completedTasks / userProgress.progressMetrics.totalTasks) * 100) 
+                : 0;
+              
+              await userProgress.save();
+              // Updated progress for user
+            } else {
+              // Task already exists in progress for user
+            }
+          } else {
+
+            
+            // Create new progress document for this user
+            const newProgress = await UserBatchProgress.create({
+              userId: user._id,
+              batchId: batch,
+              taskProgress: [{
+                taskId: task._id,
+                status: 'not_started',
+                pointsEarned: 0,
+                attempts: 0
+              }],
+              progressMetrics: {
+                totalTasks: 1,
+                completedTasks: 0,
+                completionPercentage: 0
+              }
+            });
+            
+            console.log(`🔍 DEBUG: Created new progress for user ${user._id}`);
+          }
+        }
+      } else {
+        // No batch found with ID
+      }
+    }
+
+    // Prepare comprehensive response with real-time data
+    const responseData = {
+      success: true, 
+      task,
+      message: 'Task created successfully and assigned to batch',
+      realTimeData: {
+        taskId: task._id,
+        taskName: task.name,
+        batchId: batch,
+        points: task.points,
+        difficulty: task.difficulty,
+        createdAt: task.createdAt,
+        assignedTo: task.assignedTo,
+        totalUsersAffected: batchWithUsers ? batchWithUsers.users.length : 0
+      }
+    };
+    
+    res.status(201).json(responseData);
   } catch (error) {
     console.error("Error creating task:", error);
     res.status(500).json({ message: "Failed to create task", error });
@@ -207,11 +355,6 @@ export const getTaskById = async (req, res) => {
 // POST /api/tasks/:id/submit - Comprehensive Backend-Driven Task Submission
 export const submitTask = async (req, res) => {
   try {
-    console.log('🔍 DEBUG: Starting task submission');
-    console.log('Request params:', req.params);
-    console.log('Request body:', req.body);
-    console.log('Request file:', req.file);
-    
     const { id } = req.params; // taskId
     let { userId, submissionType, value } = req.body;
     
@@ -221,46 +364,30 @@ export const submitTask = async (req, res) => {
       value = `/uploads/${req.file.filename}`;
     }
     
-    console.log('🔍 DEBUG: Processed submission data:', { userId, submissionType, value });
-    
     if (!userId || !submissionType || !value) {
-      console.log('❌ DEBUG: Missing required fields');
       return res.status(400).json({ message: "Missing required fields." });
     }
     
     // Check if task exists and populate batch info
-    console.log('🔍 DEBUG: Looking for task with ID:', id);
     const task = await Task.findById(id).populate('category');
     if (!task) {
-      console.log('❌ DEBUG: Task not found');
       return res.status(404).json({ message: "Task not found" });
     }
-    console.log('✅ DEBUG: Task found:', task.name);
     
     // Get user and their batch information
-    console.log('🔍 DEBUG: Looking for user with ID:', userId);
-    const user = await User.findById(userId); // Remove invalid .populate('batches')
+    const user = await User.findById(userId);
     if (!user) {
-      console.log('❌ DEBUG: User not found');
       return res.status(404).json({ message: "User not found" });
     }
-    console.log('✅ DEBUG: User found:', user.username || user.displayName);
     
     // Find the relevant batch for this task
-    // Get the batch that contains this task
-    console.log('🔍 DEBUG: Finding batch for task:', id);
     let relevantBatch = null;
     
     try {
       // Find batch that contains this task
       relevantBatch = await Batch.findOne({ 'tasks': id });
-      if (relevantBatch) {
-        console.log('✅ DEBUG: Found batch for task:', relevantBatch.name);
-      } else {
-        console.log('⚠️ DEBUG: No batch found containing this task');
-      }
     } catch (batchError) {
-      console.log('❌ DEBUG: Error finding batch:', batchError.message);
+      console.error('Error finding batch:', batchError.message);
     }
     
     // Check for existing submission
@@ -299,31 +426,30 @@ export const submitTask = async (req, res) => {
     }
     
     // Update or Create User Batch Progress (Real-time Progress Tracking)
-    console.log('🔍 DEBUG: Checking batch progress for batch:', relevantBatch?._id);
+    let userProgress = null;
+    
     if (relevantBatch) {
-      console.log('🔍 DEBUG: Looking for existing UserBatchProgress');
-      let userProgress = await UserBatchProgress.findOne({ 
+      // Find existing UserBatchProgress or create new one
+      userProgress = await UserBatchProgress.findOne({ 
         userId, 
         batchId: relevantBatch._id 
       });
       
       if (!userProgress) {
-        console.log('🔍 DEBUG: Creating new UserBatchProgress record');
-        
         // Get all tasks in this batch to properly initialize
         const batchWithTasks = await Batch.findById(relevantBatch._id).populate('tasks');
         
         // Create task progress entries for all tasks in the batch
         const taskProgress = batchWithTasks.tasks.map(batchTask => ({
           taskId: batchTask._id,
-          status: String(batchTask._id) === String(id) ? 'submitted' : 'not_started',
+          status: String(batchTask._id) === String(id) ? 'completed' : 'not_started',
           submissionId: String(batchTask._id) === String(id) ? submission._id : null,
           submittedAt: String(batchTask._id) === String(id) ? new Date() : null,
           pointsEarned: String(batchTask._id) === String(id) ? (task.points || 50) : 0,
           attempts: String(batchTask._id) === String(id) ? 1 : 0
         }));
 
-        // Create new progress record with proper initialization
+        // Create new progress record
         userProgress = new UserBatchProgress({
           userId,
           batchId: relevantBatch._id,
@@ -331,8 +457,8 @@ export const submitTask = async (req, res) => {
           taskProgress,
           progressMetrics: {
             totalTasks: batchWithTasks.tasks.length,
-            completedTasks: 0,
-            submittedTasks: 1, // Current submission
+            completedTasks: 1,
+            submittedTasks: 1,
             gradedTasks: 0,
             totalPointsEarned: task.points || 50,
             completionPercentage: Math.round((1 / batchWithTasks.tasks.length) * 100),
@@ -342,139 +468,107 @@ export const submitTask = async (req, res) => {
           lastActiveAt: new Date(),
           status: 'active'
         });
-        console.log('✅ DEBUG: UserBatchProgress created with proper initialization');
-      } else {
-        console.log('✅ DEBUG: Found existing UserBatchProgress');
-      }
-      
-      // Update task progress
-      const existingTaskProgress = userProgress.taskProgress.find(
-        tp => String(tp.taskId) === String(id)
-      );
-      
-      if (existingTaskProgress) {
-        // Update existing task progress
-        existingTaskProgress.status = 'submitted';
-        existingTaskProgress.submissionId = submission._id;
-        existingTaskProgress.submittedAt = new Date();
-        existingTaskProgress.attempts += 1;
-        // Make sure to update points earned
-        existingTaskProgress.pointsEarned = task.points || 50;
-        console.log(`✅ Updated existing task progress: ${task.points || 50} points`);
-      } else {
-        // Add new task progress
-        const newTaskProgress = {
-          taskId: id,
-          status: 'submitted',
-          submissionId: submission._id,
-          submittedAt: new Date(),
-          pointsEarned: task.points || 50,
-          attempts: 1
-        };
-        userProgress.taskProgress.push(newTaskProgress);
-        console.log(`✅ Added new task progress: ${task.points || 50} points`);
-      }
-      
-      // Add activity log entry
-      console.log('🔍 DEBUG: Adding activity log entry');
-      try {
+        
+        // Add initial activity log entry
         userProgress.addActivity(
-          'task_submitted',
+          'task_completed',
           id,
-          `Submitted task: ${task.name}`,
+          `Completed task: ${task.name}`,
           {
             submissionType,
             taskName: task.name,
             points: task.points || 50,
-            submissionId: submission._id
+            submissionId: submission._id,
+            status: 'completed'
           }
         );
-        console.log('✅ DEBUG: Activity log added successfully');
-      } catch (activityError) {
-        console.error('❌ DEBUG: Error adding activity:', activityError);
-        throw activityError;
-      }
-      
-      // Update progress metrics
-      console.log('🔍 DEBUG: Updating progress metrics');
-      try {
-        userProgress.updateProgressMetrics();
-        console.log('✅ DEBUG: Progress metrics updated successfully');
-      } catch (metricsError) {
-        console.error('❌ DEBUG: Error updating metrics:', metricsError);
-        throw metricsError;
-      }
-      
-      console.log('🔍 DEBUG: Saving UserBatchProgress');
-      await userProgress.save();
-      console.log('✅ DEBUG: UserBatchProgress saved successfully');
-    }
-    
-    // Prepare notification data for admin and mentors
-    const notificationData = {
-      type: 'task_submission',
-      userId,
-      userName: user.displayName || user.username,
-      taskId: id,
-      taskName: task.name,
-      submissionType,
-      submittedAt: new Date(),
-      batchId: relevantBatch?._id,
-      batchName: relevantBatch?.name,
-      points: task.points || 50
-    };
-    
-    // Get batch mentors and admin for notifications
-    let notificationRecipients = [];
-    if (relevantBatch) {
-      const batch = await Batch.findById(relevantBatch._id)
-        .populate('mentors', 'username displayName email')
-        .populate('admin', 'username displayName email');
-      
-      if (batch) {
-        // Add mentors to notification recipients
-        if (batch.mentors && Array.isArray(batch.mentors)) {
-          notificationRecipients = [...notificationRecipients, ...batch.mentors];
-        } else if (batch.mentors) {
-          notificationRecipients.push(batch.mentors);
+      } else {
+        // Update existing task progress
+        const existingTaskProgress = userProgress.taskProgress.find(
+          tp => String(tp.taskId) === String(id)
+        );
+        
+        if (existingTaskProgress) {
+          // Update existing task progress
+          existingTaskProgress.status = 'completed';
+          existingTaskProgress.submissionId = submission._id;
+          existingTaskProgress.submittedAt = new Date();
+          existingTaskProgress.attempts += 1;
+          existingTaskProgress.pointsEarned = task.points || 50;
+        } else {
+          // Add new task progress
+          const newTaskProgress = {
+            taskId: id,
+            status: 'completed',
+            submissionId: submission._id,
+            submittedAt: new Date(),
+            pointsEarned: task.points || 50,
+            attempts: 1
+          };
+          userProgress.taskProgress.push(newTaskProgress);
         }
         
-        // Add admin to notification recipients
-        if (batch.admin) {
-          notificationRecipients.push(batch.admin);
-        }
+        // Update progress metrics
+        userProgress.updateProgressMetrics();
       }
-    }
+      
+      // Add activity log entry for task completion
+      userProgress.addActivity(
+        'task_completed',
+        id,
+        `Completed task: ${task.name}`,
+        {
+          submissionType,
+          taskName: task.name,
+          points: task.points || 50,
+          submissionId: submission._id,
+          status: 'completed'
+        }
+      );
+      
+      // Save the progress
+      await userProgress.save();
     
-    // Log notification for debugging (in production, you'd send actual notifications)
-    console.log('📧 Task Submission Notification:', {
-      ...notificationData,
-      recipients: notificationRecipients.map(r => r.username || r.displayName)
-    });
+    // Update user's total XP
+    user.xps += (task.points || 50);
+    await user.save();
+  }
     
     // Return comprehensive response with real-time data
     const responseData = {
-      message: "Task submitted successfully!",
+      success: true,
+      message: "Task completed successfully!",
       submission: {
         id: submission._id,
         submissionType: submission.submissionType,
         submittedAt: submission.submittedAt,
-        status: submission.status
+        status: 'completed'
       },
       progress: {
         pointsEarned: task.points || 50,
         totalXPS: user.xps,
-        taskCompleted: true
+        taskCompleted: true,
+        newTotalXP: user.xps
       },
-      notifications: {
-        recipientCount: notificationRecipients.length,
-        notified: notificationRecipients.map(r => ({
-          id: r._id,
-          name: r.displayName || r.username,
-          role: r.role || 'mentor'
-        }))
+      realTimeData: {
+        taskStatus: 'completed',
+        taskId: id,
+        batchId: relevantBatch ? relevantBatch._id : null,
+        userId: userId,
+        pointsEarned: task.points || 50,
+        newTotalXP: user.xps,
+        completionTime: new Date(),
+        batchProgress: userProgress ? {
+          completedTasks: userProgress.progressMetrics.completedTasks,
+          totalTasks: userProgress.progressMetrics.totalTasks,
+          completionPercentage: userProgress.progressMetrics.completionPercentage,
+          totalPointsEarned: userProgress.progressMetrics.totalPointsEarned
+        } : null,
+        activityLog: userProgress ? userProgress.activityLog.slice(-5) : []
       }
     };
+    
+
     
     res.status(201).json(responseData);
     

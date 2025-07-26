@@ -5,7 +5,7 @@ async function getTasks() {
   try {
     console.log('🔍 Fetching tasks from database...');
     
-    const response = await axios.get('http://localhost:3001/api/tasks/all');
+    const response = await axios.get('http://localhost:3001/api/task/all');
     const tasks = response.data;
     
     console.log(`Found ${tasks.length} tasks:`);

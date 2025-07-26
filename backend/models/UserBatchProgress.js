@@ -67,43 +67,65 @@ UserBatchProgressSchema.index({ lastActiveAt: -1 });
 
 // Method to update progress metrics
 UserBatchProgressSchema.methods.updateProgressMetrics = function() {
-  const totalTasks = this.taskProgress.length;
-  const completedTasks = this.taskProgress.filter(tp => tp.status === "completed").length;
-  const submittedTasks = this.taskProgress.filter(tp => ["submitted", "graded", "completed"].includes(tp.status)).length;
-  const gradedTasks = this.taskProgress.filter(tp => tp.grade !== undefined && tp.grade !== null).length;
-  const totalPointsEarned = this.taskProgress.reduce((sum, tp) => sum + (tp.pointsEarned || 0), 0);
-  
-  const gradedTasksWithScores = this.taskProgress.filter(tp => tp.grade !== undefined && tp.grade !== null);
-  const averageGrade = gradedTasksWithScores.length > 0 
-    ? gradedTasksWithScores.reduce((sum, tp) => sum + tp.grade, 0) / gradedTasksWithScores.length 
-    : 0;
-  
-  this.progressMetrics = {
-    totalTasks,
-    completedTasks,
-    submittedTasks,
-    gradedTasks,
-    totalPointsEarned,
-    completionPercentage: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
-    averageGrade: Math.round(averageGrade * 100) / 100
-  };
-  
-  this.lastActiveAt = new Date();
+  try {
+    const totalTasks = this.taskProgress.length;
+    const completedTasks = this.taskProgress.filter(tp => tp.status === "completed").length;
+    const submittedTasks = this.taskProgress.filter(tp => ["submitted", "graded", "completed"].includes(tp.status)).length;
+    const gradedTasks = this.taskProgress.filter(tp => tp.grade !== undefined && tp.grade !== null).length;
+    const totalPointsEarned = this.taskProgress.reduce((sum, tp) => sum + (tp.pointsEarned || 0), 0);
+    
+    const gradedTasksWithScores = this.taskProgress.filter(tp => tp.grade !== undefined && tp.grade !== null);
+    const averageGrade = gradedTasksWithScores.length > 0 
+      ? gradedTasksWithScores.reduce((sum, tp) => sum + tp.grade, 0) / gradedTasksWithScores.length 
+      : 0;
+    
+    this.progressMetrics = {
+      totalTasks,
+      completedTasks,
+      submittedTasks,
+      gradedTasks,
+      totalPointsEarned,
+      completionPercentage: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
+      averageGrade: Math.round(averageGrade * 100) / 100
+    };
+    
+    this.lastActiveAt = new Date();
+  } catch (error) {
+    console.error('Error updating progress metrics:', error);
+    // Set default values if error occurs
+    this.progressMetrics = {
+      totalTasks: 0,
+      completedTasks: 0,
+      submittedTasks: 0,
+      gradedTasks: 0,
+      totalPointsEarned: 0,
+      completionPercentage: 0,
+      averageGrade: 0
+    };
+  }
 };
 
 // Method to add activity log entry
 UserBatchProgressSchema.methods.addActivity = function(action, taskId, description, metadata = {}) {
-  this.activityLog.push({
-    action,
-    taskId,
-    description,
-    metadata,
-    timestamp: new Date()
-  });
-  
-  // Keep only last 100 activities to prevent document size issues
-  if (this.activityLog.length > 100) {
-    this.activityLog = this.activityLog.slice(-100);
+  try {
+    this.activityLog.push({
+      action,
+      taskId,
+      description,
+      metadata,
+      timestamp: new Date()
+    });
+    
+    // Keep only last 100 activities to prevent document size issues
+    if (this.activityLog.length > 100) {
+      this.activityLog = this.activityLog.slice(-100);
+    }
+  } catch (error) {
+    console.error('Error adding activity log:', error);
+    // Initialize activityLog if it doesn't exist
+    if (!this.activityLog) {
+      this.activityLog = [];
+    }
   }
 };
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import axios from 'axios';
 
 export default function BatchChat({ batchId }) {
@@ -10,7 +10,7 @@ export default function BatchChat({ batchId }) {
   const messagesEndRef = useRef(null);
 
   // Fetch messages
-  const fetchMessages = async () => {
+  const fetchMessages = useCallback(async () => {
     try {
       setLoading(true);
       const res = await axios.get(`http://localhost:3001/api/batches/${batchId}/messages`, { withCredentials: true });
@@ -20,13 +20,13 @@ export default function BatchChat({ batchId }) {
       setError('Failed to load messages');
       setLoading(false);
     }
-  };
+  }, [batchId]);
 
   useEffect(() => {
     fetchMessages();
     const interval = setInterval(fetchMessages, 5000); // Poll every 5s
     return () => clearInterval(interval);
-  }, [batchId]);
+  }, [batchId, fetchMessages]);
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -35,7 +35,7 @@ export default function BatchChat({ batchId }) {
   }, [messages]);
 
   // Send message
-  const handleSend = async (e) => {
+  const handleSend = useCallback(async (e) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
     setSending(true);
@@ -51,7 +51,7 @@ export default function BatchChat({ batchId }) {
       setError('Failed to send message');
     }
     setSending(false);
-  };
+  }, [batchId, newMessage, fetchMessages]);
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-4 max-w-2xl mx-auto">
